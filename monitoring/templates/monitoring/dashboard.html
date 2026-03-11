@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Monitoring Dashboard</title>
+    <meta name="description" content="IDH Model Performance Monitoring & Feature Drift Analysis Dashboard">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Plotly.js from CDN -->
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            min-height: 100vh;
+            color: #e2e8f0;
+        }
+
+        /* Header */
+        .header {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #c7d2fe, #a5b4fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-subtitle {
+            font-size: 13px;
+            color: #64748b;
+            margin-left: auto;
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            gap: 24px;
+            padding: 24px;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 360px;
+            flex-shrink: 0;
+        }
+
+        .card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #a5b4fc;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-title::before {
+            content: '';
+            width: 3px;
+            height: 16px;
+            background: linear-gradient(180deg, #6366f1, #8b5cf6);
+            border-radius: 2px;
+        }
+
+        /* Form Elements */
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 13px;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+
+        .form-control::file-selector-button {
+            padding: 6px 14px;
+            margin-right: 12px;
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .form-control::file-selector-button:hover {
+            background: linear-gradient(135deg, #4338ca, #4f46e5);
+        }
+
+        textarea.form-control {
+            resize: vertical;
+            min-height: 70px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .help-text {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 4px;
+            line-height: 1.5;
+        }
+
+        /* Buttons */
+        .btn-primary {
+            width: 100%;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #4338ca, #6d28d9);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        /* Messages */
+        .messages {
+            list-style: none;
+            margin-bottom: 16px;
+        }
+
+        .message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .message-success {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #6ee7b7;
+        }
+
+        .message-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+
+        /* Dashboard Area */
+        .dashboard-area {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .dashboard-card {
+            background: rgba(30, 41, 59, 0.5);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(99, 102, 241, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            min-height: 600px;
+        }
+
+        /* Metrics filter bar */
+        .metrics-bar {
+            padding: 16px 20px;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 8px;
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .metrics-bar label.filter-label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #a5b4fc;
+            margin-bottom: 0;
+        }
+
+        .metric-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .metric-checkbox input[type="checkbox"] {
+            accent-color: #6366f1;
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .metric-checkbox span {
+            font-size: 14px;
+            color: #cbd5e1;
+        }
+
+        /* Placeholder */
+        .placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 500px;
+            color: #475569;
+            text-align: center;
+        }
+
+        .placeholder-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .placeholder h2 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 8px;
+        }
+
+        .placeholder p {
+            font-size: 14px;
+            color: #475569;
+        }
+
+        /* Status Badge */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-ready {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #6ee7b7;
+        }
+
+        .status-waiting {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: #fbbf24;
+        }
+
+        /* Error banner */
+        .error-banner {
+            padding: 16px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            color: #fca5a5;
+            font-size: 14px;
+        }
+
+        /* Alert badges - horizontal layout */
+        .alerts-section {
+            margin-bottom: 16px;
+        }
+
+        .alerts-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .alerts-header {
+            font-size: 14px;
+            font-weight: 600;
+            color: #a5b4fc;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .analysis-meta {
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            background: rgba(15, 23, 42, 0.4);
+            border-radius: 6px;
+            border: 1px solid rgba(99, 102, 241, 0.1);
+        }
+
+        .analysis-meta strong {
+            color: #a5b4fc;
+        }
+
+        .collapse-btn {
+            background: transparent;
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            color: #94a3b8;
+            font-size: 12px;
+            padding: 4px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .collapse-btn:hover {
+            background: rgba(99, 102, 241, 0.1);
+            color: #a5b4fc;
+        }
+
+        .badges-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .alert-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 1px solid;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s ease;
+            background: transparent;
+        }
+
+        .alert-badge:hover {
+            transform: translateY(-1px);
+        }
+
+        .alert-badge.active {
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.4);
+        }
+
+        .badge-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .badge-label {
+            white-space: nowrap;
+        }
+
+        .badge-metric {
+            font-size: 11px;
+            opacity: 0.7;
+        }
+
+        /* Badge severity colors */
+        .badge-critical {
+            border-color: rgba(239, 68, 68, 0.4);
+            color: #fca5a5;
+        }
+        .badge-critical .badge-dot { background: #ef4444; }
+        .badge-critical:hover { background: rgba(239, 68, 68, 0.08); }
+
+        .badge-warning {
+            border-color: rgba(245, 158, 11, 0.4);
+            color: #fcd34d;
+        }
+        .badge-warning .badge-dot { background: #f59e0b; }
+        .badge-warning:hover { background: rgba(245, 158, 11, 0.08); }
+
+        .badge-info {
+            border-color: rgba(16, 185, 129, 0.4);
+            color: #6ee7b7;
+        }
+        .badge-info .badge-dot { background: #10b981; }
+        .badge-info:hover { background: rgba(16, 185, 129, 0.08); }
+
+        /* Show more / collapse buttons */
+        .show-more-btn {
+            display: block;
+            width: 100%;
+            padding: 6px;
+            background: transparent;
+            border: 1px dashed rgba(99, 102, 241, 0.2);
+            border-radius: 6px;
+            color: #64748b;
+            font-size: 12px;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 4px;
+        }
+
+        .show-more-btn:hover {
+            background: rgba(99, 102, 241, 0.05);
+            color: #a5b4fc;
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        /* Detail panel */
+        .alert-details-panel {
+            margin-top: 10px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .alert-detail-item {
+            padding: 14px 18px;
+            border-left: 3px solid;
+            margin-bottom: 8px;
+            border-radius: 0 8px 8px 0;
+            animation: slideDown 0.2s ease;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .alert-detail-critical {
+            background: rgba(239, 68, 68, 0.06);
+            border-left-color: #ef4444;
+        }
+
+        .alert-detail-warning {
+            background: rgba(245, 158, 11, 0.06);
+            border-left-color: #f59e0b;
+        }
+
+        .alert-detail-info {
+            background: rgba(16, 185, 129, 0.06);
+            border-left-color: #10b981;
+        }
+
+        .alert-detail-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .alert-detail-critical .alert-detail-title { color: #fca5a5; }
+        .alert-detail-warning .alert-detail-title { color: #fcd34d; }
+        .alert-detail-info .alert-detail-title { color: #6ee7b7; }
+
+        .alert-detail-text {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.7;
+            white-space: pre-line;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-icon">📊</div>
+        <h1>Model Monitoring Dashboard</h1>
+        <span class="header-subtitle">IDH Prediction Model · Performance & Drift Analysis</span>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <!-- Sidebar: Upload Form -->
+        <div class="sidebar">
+            <!-- Messages -->
+            {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}
+                <li class="message message-{{ message.tags }}">
+                    {% if message.tags == 'success' %}✅{% elif message.tags == 'error' %}❌{% endif %}
+                    {{ message }}
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            <div class="card">
+                <div class="card-title">資料上傳</div>
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    {% for field in form %}
+                    <div class="form-group">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.help_text %}
+                        <div class="help-text">{{ field.help_text }}</div>
+                        {% endif %}
+                        {% for error in field.errors %}
+                        <div class="help-text" style="color: #fca5a5;">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                    <button type="submit" class="btn-primary">
+                        🚀 開始分析
+                    </button>
+                </form>
+            </div>
+
+            <!-- Status Card -->
+            <div class="card">
+                <div class="card-title">系統狀態</div>
+                {% if has_data %}
+                <span class="status-badge status-ready">🟢 資料已載入</span>
+                {% if uploaded_files %}
+                <div style="margin-top: 12px; font-size: 12px; color: #94a3b8; line-height: 1.8;">
+                    <div>📄 <strong>Dataset：</strong>{{ uploaded_files.data_file }}</div>
+                    <div>🤖 <strong>Model：</strong>{{ uploaded_files.model_file }}</div>
+                    {% if uploaded_files.train_file %}
+                    <div>📊 <strong>Baseline：</strong>{{ uploaded_files.train_file }}</div>
+                    {% else %}
+                    <div style="color: #fbbf24;">⚠️ 未上傳 Baseline（使用第一個時間窗口）</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                <p style="font-size: 13px; color: #94a3b8; margin-top: 12px;">
+                    可用上方的 checkbox 切換要顯示的指標。
+                </p>
+                {% else %}
+                <span class="status-badge status-waiting">🟡 等待上傳</span>
+                <p style="font-size: 13px; color: #94a3b8; margin-top: 12px;">
+                    請上傳 CSV 資料與模型檔案以開始分析。
+                </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Dashboard Area -->
+        <div class="dashboard-area">
+            <div class="dashboard-card">
+                {% if figure_error %}
+                <div class="error-banner">
+                    ❌ 繪圖錯誤：{{ figure_error }}
+                </div>
+
+                {% elif figure_json %}
+                <!-- Alerts Section -->
+                {% if alerts %}
+                <div class="alerts-section" id="alerts-section">
+                    <div class="alerts-header-row">
+                        <div class="alerts-header">🔍 模型監控分析報告</div>
+                        <button class="collapse-btn" id="alerts-collapse-btn" onclick="toggleAlertsSection()">
+                            收合 ▲
+                        </button>
+                    </div>
+                    {% if analysis_info.start_date %}
+                    <div class="analysis-meta">
+                        📅 共 <strong>{{ analysis_info.total_windows }}</strong> 個時間窗口
+                        ｜趨勢分析取最近 <strong>{{ analysis_info.trend_windows }}</strong> 個窗口
+                        （<strong>{{ analysis_info.start_date }} ~ {{ analysis_info.end_date }}</strong>）
+                    </div>
+                    {% endif %}
+
+                    <!-- Horizontal badges -->
+                    <div class="badges-container" id="badges-container">
+                        {% for alert in alerts %}
+                        <button class="alert-badge badge-{{ alert.level }}"
+                                data-index="{{ forloop.counter0 }}"
+                                onclick="toggleBadgeDetail(this, {{ forloop.counter0 }})">
+                            <span class="badge-dot"></span>
+                            <span class="badge-label">{{ alert.category }}</span>
+                            <span class="badge-metric">{{ alert.metric|default:"" }}</span>
+                        </button>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Expand/collapse control -->
+                    <button class="show-more-btn" id="show-more-btn" onclick="toggleDetails()">
+                        顯示更多 ▼
+                    </button>
+
+                    <!-- Expandable detail panel -->
+                    <div class="alert-details-panel" id="alert-details-panel" style="display:none;">
+                        {% for alert in alerts %}
+                        <div class="alert-detail-item alert-detail-{{ alert.level }}" id="alert-detail-{{ forloop.counter0 }}" style="display:none;">
+                            <div class="alert-detail-title">{{ alert.title }}</div>
+                            <div class="alert-detail-text">{{ alert.detail }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Metrics filter -->
+                <div class="metrics-bar">
+                    <label class="filter-label">選擇指標：</label>
+                    <label class="metric-checkbox">
+                        <input type="checkbox" data-trace="AUPRC" checked onchange="toggleTrace(this)">
+                        <span>AUPRC</span>
+                    </label>
+                    <label class="metric-checkbox">
+                        <input type="checkbox" data-trace="AUROC" onchange="toggleTrace(this)">
+                        <span>AUROC</span>
+                    </label>
+                    <label class="metric-checkbox">
+                        <input type="checkbox" data-trace="F1 score" onchange="toggleTrace(this)">
+                        <span>F1 Score</span>
+                    </label>
+                    <label class="metric-checkbox">
+                        <input type="checkbox" data-trace="JS divergence" checked onchange="toggleTrace(this)">
+                        <span>JS Divergence</span>
+                    </label>
+                </div>
+
+                <!-- Chart -->
+                <div id="plotly-chart" style="width: 100%; min-height: 800px;"></div>
+
+                <script>
+                    // Parse figure JSON from Django
+                    var figureData = {{ figure_json|safe }};
+
+                    // Render the chart
+                    Plotly.newPlot('plotly-chart', figureData.data, figureData.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        scrollZoom: true
+                    });
+
+                    // Toggle trace visibility by checkbox
+                    function toggleTrace(checkbox) {
+                        var traceName = checkbox.getAttribute('data-trace');
+                        var chartDiv = document.getElementById('plotly-chart');
+                        var data = chartDiv.data;
+
+                        for (var i = 0; i < data.length; i++) {
+                            if (data[i].name === traceName) {
+                                var visible = checkbox.checked ? true : 'legendonly';
+                                Plotly.restyle('plotly-chart', {visible: visible}, [i]);
+                                break;
+                            }
+                        }
+                    }
+
+                    // Apply initial visibility (hide AUROC and F1 by default)
+                    document.addEventListener('DOMContentLoaded', function() {
+                        var checkboxes = document.querySelectorAll('.metric-checkbox input[type="checkbox"]');
+                        checkboxes.forEach(function(cb) {
+                            if (!cb.checked) {
+                                toggleTrace(cb);
+                            }
+                        });
+                    });
+
+                    // === Alert Badge Interactions ===
+                    var detailsExpanded = false;
+                    var sectionCollapsed = false;
+
+                    function toggleAlertsSection() {
+                        var content = document.getElementById('badges-container');
+                        var meta = document.querySelector('.analysis-meta');
+                        var showBtn = document.getElementById('show-more-btn');
+                        var panel = document.getElementById('alert-details-panel');
+                        var btn = document.getElementById('alerts-collapse-btn');
+
+                        sectionCollapsed = !sectionCollapsed;
+                        if (sectionCollapsed) {
+                            if (content) content.style.display = 'none';
+                            if (meta) meta.style.display = 'none';
+                            if (showBtn) showBtn.style.display = 'none';
+                            if (panel) panel.style.display = 'none';
+                            btn.textContent = '展開 ▼';
+                        } else {
+                            if (content) content.style.display = 'flex';
+                            if (meta) meta.style.display = 'block';
+                            if (showBtn) showBtn.style.display = 'block';
+                            btn.textContent = '收合 ▲';
+                        }
+                    }
+
+                    function toggleDetails() {
+                        var panel = document.getElementById('alert-details-panel');
+                        var btn = document.getElementById('show-more-btn');
+                        detailsExpanded = !detailsExpanded;
+
+                        if (detailsExpanded) {
+                            panel.style.display = 'block';
+                            // Show all detail items
+                            var items = panel.querySelectorAll('.alert-detail-item');
+                            items.forEach(function(item) { item.style.display = 'block'; });
+                            btn.textContent = '收合詳細 ▲';
+                            // Deselect all badges
+                            var badges = document.querySelectorAll('.alert-badge');
+                            badges.forEach(function(b) { b.classList.remove('active'); });
+                        } else {
+                            panel.style.display = 'none';
+                            var items = panel.querySelectorAll('.alert-detail-item');
+                            items.forEach(function(item) { item.style.display = 'none'; });
+                            btn.textContent = '顯示更多 ▼';
+                        }
+                    }
+
+                    function toggleBadgeDetail(badge, index) {
+                        var panel = document.getElementById('alert-details-panel');
+                        var target = document.getElementById('alert-detail-' + index);
+                        var badges = document.querySelectorAll('.alert-badge');
+                        var btn = document.getElementById('show-more-btn');
+
+                        // Check if this badge is already active
+                        var wasActive = badge.classList.contains('active');
+
+                        // Deselect all badges
+                        badges.forEach(function(b) { b.classList.remove('active'); });
+
+                        // Hide all details
+                        var items = panel.querySelectorAll('.alert-detail-item');
+                        items.forEach(function(item) { item.style.display = 'none'; });
+
+                        if (wasActive) {
+                            // Collapse
+                            panel.style.display = 'none';
+                            detailsExpanded = false;
+                            btn.textContent = '顯示更多 ▼';
+                        } else {
+                            // Show this badge's detail
+                            panel.style.display = 'block';
+                            target.style.display = 'block';
+                            badge.classList.add('active');
+                            detailsExpanded = true;
+                            btn.textContent = '收合詳細 ▲';
+                        }
+                    }
+                </script>
+
+                {% else %}
+                <div class="placeholder">
+                    <div class="placeholder-icon">📈</div>
+                    <h2>Dashboard</h2>
+                    <p>上傳資料後，互動式分析圖表將顯示在這裡。</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>
