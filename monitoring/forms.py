@@ -69,15 +69,15 @@ class MonitoringForm(forms.Form):
         })
     )
 
-    alert_mode = forms.ChoiceField(
-        label='alert模式',
-        choices=[
-            ('strict', '一般監控模式 (嚴格 - 及早預警)'),
-            ('loose', '異常診斷模式 (寬鬆 - 減少干擾)'),
-        ],
-        initial='strict',
-        help_text='嚴格模式適用於日常監控；若是已知模型異常，可切換至寬鬆模式以專注於最嚴重的偏差。',
-        widget=forms.Select(attrs={
-            'class': 'form-control',
-        })
-    )
+    # alert_mode = forms.ChoiceField(
+    #     label='alert模式',
+    #     choices=[
+    #         ('strict', '一般監控模式 (嚴格 - 及早預警)'),
+    #         ('loose', '異常診斷模式 (寬鬆 - 減少干擾)'),
+    #     ],
+    #     initial='strict',
+    #     help_text='嚴格模式適用於日常監控；若是已知模型異常，可切換至寬鬆模式以專注於最嚴重的偏差。',
+    #     widget=forms.Select(attrs={
+    #         'class': 'form-control',
+    #     })
+    # )

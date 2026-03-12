@@ -652,26 +652,26 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
     if js_val >= js_thresh['critical']:
         alerts.append({
             'level': 'critical',
-            'title': '🚨 模型老化警告！資料分布嚴重偏移',
+            'title': '🚨 模型老化警告！最新資料分布嚴重偏移',
             'detail': (
                 f'最新 JS Divergence = {js_val:.3f}（門檻值 {js_thresh["critical"]:.2f}），'
                 f'表示目前輸入資料的分布已與 baseline 顯著不同。'
                 f'\n建議立即：1) 檢查新資料的來源是否改變、2) 重新訓練模型。'
             ),
-            'metric': 'JS divergence', 'value': js_val,
-            'category': '資料偏移',
+            'metric': '最新 JS divergence', 'value': js_val,
+            'category': '最新資料偏移',
         })
     elif js_val >= js_thresh['warning']:
         alerts.append({
             'level': 'warning',
-            'title': '⚠️ 資料分布偏移偵測',
+            'title': '⚠️ 最新資料分布偏移偵測',
             'detail': (
                 f'最新 JS Divergence = {js_val:.3f}（門檻值 {js_thresh["warning"]:.2f}），'
                 f'資料分布開始偏離 baseline。'
                 f'\n建議：持續觀察後續幾個時間窗口的趨勢。'
             ),
-            'metric': 'JS divergence', 'value': js_val,
-            'category': '資料偏移',
+            'metric': '最新 JS divergence', 'value': js_val,
+            'category': '最新資料偏移',
         })
 
     # JS Divergence trend: consecutive increases
