@@ -151,3 +151,8 @@ CACHES = {
         'TIMEOUT': 3600,
     }
 }
+
+# Ollama LLM Settings
+OLLAMA_HOST = config('OLLAMA_HOST', default='http://192.168.63.184:11434')
+OLLAMA_MODEL = config('OLLAMA_MODEL', default='gpt-oss:120b')
+OLLAMA_ENABLED = config('OLLAMA_ENABLED', default=False, cast=bool)

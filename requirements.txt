@@ -111,3 +111,6 @@ typing_extensions==4.15.0       # 型別提示擴充
 importlib_metadata==8.7.1       # 套件元資料
 zipp==3.23.0                    # ZIP 檔案處理
 colorama==0.4.6                 # Windows 終端上色
+
+# ===== LLM（語言模型分析）=====
+ollama                          # Ollama Python 用戶端（連線遠端 LLM）

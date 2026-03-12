@@ -11,6 +11,7 @@ import plotly.utils
 
 from .forms import MonitoringForm
 from .services import load_and_process, build_dashboard_figure, generate_alerts
+from .llm_service import generate_llm_analysis
 
 
 CACHE_KEY = 'monitoring_data_default'
@@ -116,6 +117,7 @@ def dashboard_view(request):
     figure_error = None
     alerts = []
     analysis_info = {}
+    llm_analysis = None
     if has_data:
         cached_data = cache.get(CACHE_KEY)
         if cached_data:
@@ -150,6 +152,12 @@ def dashboard_view(request):
                            'detail': str(e), 'metric': None, 'value': None}]
                 analysis_info = {}
 
+            # Generate LLM analysis (only if there are abnormal alerts)
+            try:
+                llm_analysis = generate_llm_analysis(alerts, analysis_info)
+            except Exception as e:
+                llm_analysis = f"⚠️ AI 分析暫時無法使用（{str(e)}）"
+
     context = {
         'form': form,
         'has_data': has_data,
@@ -158,5 +166,6 @@ def dashboard_view(request):
         'figure_error': figure_error,
         'alerts': alerts,
         'analysis_info': analysis_info,
+        'llm_analysis': llm_analysis,
     }
     return render(request, 'monitoring/dashboard.html', context)

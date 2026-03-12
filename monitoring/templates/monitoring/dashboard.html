@@ -541,6 +541,27 @@
                 width: 100%;
             }
         }
+
+        /* AI Analysis Report */
+        .ai-analysis-section {
+            margin-bottom: 16px;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(139, 92, 246, 0.25);
+            border-left: 3px solid #8b5cf6;
+            border-radius: 8px;
+            padding: 16px 20px;
+        }
+
+        .ai-analysis-content {
+            margin-top: 12px;
+        }
+
+        .ai-analysis-text {
+            font-size: 14px;
+            color: #cbd5e1;
+            line-height: 1.8;
+            white-space: pre-line;
+        }
     </style>
 </head>
 <body>
@@ -669,6 +690,21 @@
                             <div class="alert-detail-text">{{ alert.detail }}</div>
                         </div>
                         {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if llm_analysis %}
+                <!-- AI Analysis Report -->
+                <div class="ai-analysis-section" id="ai-analysis-section">
+                    <div class="alerts-header-row">
+                        <div class="alerts-header">🤖 AI 分析報告</div>
+                        <button class="collapse-btn" id="ai-collapse-btn" onclick="toggleAISection()">
+                            收合 ▲
+                        </button>
+                    </div>
+                    <div class="ai-analysis-content" id="ai-analysis-content">
+                        <div class="ai-analysis-text">{{ llm_analysis }}</div>
                     </div>
                 </div>
                 {% endif %}
@@ -809,6 +845,19 @@
                             badge.classList.add('active');
                             detailsExpanded = true;
                             btn.textContent = '收合詳細 ▲';
+                        }
+                    }
+
+                    // === AI Analysis Section Toggle ===
+                    function toggleAISection() {
+                        var content = document.getElementById('ai-analysis-content');
+                        var btn = document.getElementById('ai-collapse-btn');
+                        if (content.style.display === 'none') {
+                            content.style.display = 'block';
+                            btn.textContent = '收合 ▲';
+                        } else {
+                            content.style.display = 'none';
+                            btn.textContent = '展開 ▼';
                         }
                     }
                 </script>
