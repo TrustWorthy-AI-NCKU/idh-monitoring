@@ -469,8 +469,8 @@ def build_dashboard_figure(windows, baseline_data, dates, model, final_feats, ta
 # 7. Alert Generation (Interpretability)
 # ==========================================
 
-# Thresholds — easily extensible for future metrics
-ALERT_THRESHOLDS = {
+# Thresholds for Strict mode (General Monitoring)
+ALERT_THRESHOLDS_STRICT = {
     'JS divergence': {
         'warning': 0.10,      # Moderate data drift
         'critical': 0.25,     # Severe data drift
@@ -493,7 +493,6 @@ ALERT_THRESHOLDS = {
         'warning_drop': 0.20,
         'critical_drop': 0.35,
     },
-    # --- New metrics (text alerts only, no charts) ---
     'PSI': {
         'warning': 0.10,       # Siddiqi 2005 industry standard
         'critical': 0.25,
@@ -512,17 +511,61 @@ ALERT_THRESHOLDS = {
     },
 }
 
+# Thresholds for Loose mode (Anomaly Diagnosis - to find the root cause)
+ALERT_THRESHOLDS_LOOSE = {
+    'JS divergence': {
+        'warning': 0.20,      # Higher threshold for drift
+        'critical': 0.40,
+    },
+    'AUPRC': {
+        'warning_below': 0.30,   # Only warn if it's really bad
+        'critical_below': 0.15,
+        'warning_drop': 0.25,    # Only warn on huge drops
+        'critical_drop': 0.45,
+    },
+    'AUROC': {
+        'warning_below': 0.55,
+        'critical_below': 0.50,  # Random guess level
+        'warning_drop': 0.15,
+        'critical_drop': 0.25,
+    },
+    'F1 score': {
+        'warning_below': 0.20,
+        'critical_below': 0.10,
+        'warning_drop': 0.30,
+        'critical_drop': 0.50,
+    },
+    'PSI': {
+        'warning': 0.20,       # Looser PSI standard
+        'critical': 0.40,
+    },
+    'ECE': {
+        'warning': 0.25,       # High miscalibration
+        'critical': 0.35,
+    },
+    'Brier': {
+        'warning': 0.35,       # Worse than random
+        'critical': 0.50,
+    },
+    'Entropy': {
+        'z_warning': 3.0,      # 3σ deviation (rare)
+        'z_critical': 5.0,     # 5σ deviation (extreme)
+    },
+}
+
 DEFAULT_TREND_WINDOW = 5
 
 
 def generate_alerts(windows, baseline_data, dates, model, final_feats, target_col,
-                    trend_window=None):
+                    trend_window=None, alert_mode='strict'):
     """
     Analyze recent model metrics and data drift to generate human-readable alerts.
 
     Args:
         trend_window: Number of recent windows to analyze for trends.
                       If None, uses DEFAULT_TREND_WINDOW.
+        alert_mode: 'strict' for general monitoring, 'loose' for anomaly diagnosis.
+
 
     Returns:
         (alerts, analysis_info) tuple.
@@ -599,9 +642,12 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
     recent = all_metrics[-trend_window:] if len(all_metrics) >= trend_window else all_metrics
     latest = all_metrics[-1]
 
+    # Select threshold dictionary based on mode
+    thresholds = ALERT_THRESHOLDS_STRICT if alert_mode == 'strict' else ALERT_THRESHOLDS_LOOSE
+
     # ---------- JS Divergence (Data Drift) ----------
     js_val = latest.get('JS divergence', 0)
-    js_thresh = ALERT_THRESHOLDS['JS divergence']
+    js_thresh = thresholds['JS divergence']
 
     if js_val >= js_thresh['critical']:
         alerts.append({
@@ -649,7 +695,7 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
 
     # ---------- Performance Metrics (AUPRC, AUROC, F1) ----------
     for metric in ['AUPRC', 'AUROC', 'F1 score']:
-        thresh = ALERT_THRESHOLDS.get(metric)
+        thresh = thresholds.get(metric)
         if not thresh:
             continue
 
@@ -735,7 +781,7 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
 
     # ---------- New Metrics: PSI ----------
     psi_val = latest.get('PSI', 0)
-    psi_thresh = ALERT_THRESHOLDS['PSI']
+    psi_thresh = thresholds['PSI']
     if psi_val >= psi_thresh['critical']:
         alerts.append({
             'level': 'critical',
@@ -762,7 +808,7 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
 
     # ---------- New Metrics: ECE ----------
     ece_val = latest.get('ECE', 0)
-    ece_thresh = ALERT_THRESHOLDS['ECE']
+    ece_thresh = thresholds['ECE']
     if ece_val >= ece_thresh['critical']:
         alerts.append({
             'level': 'critical',
@@ -789,7 +835,7 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
 
     # ---------- New Metrics: Brier Score ----------
     brier_val = latest.get('Brier', 0)
-    brier_thresh = ALERT_THRESHOLDS['Brier']
+    brier_thresh = thresholds['Brier']
     if brier_val >= brier_thresh['critical']:
         alerts.append({
             'level': 'critical',
@@ -815,7 +861,7 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
 
     # ---------- New Metrics: Entropy Z-Score ----------
     ent_z = abs(latest.get('Entropy_z', 0))
-    ent_thresh = ALERT_THRESHOLDS['Entropy']
+    ent_thresh = thresholds['Entropy']
     if ent_z >= ent_thresh['z_critical']:
         alerts.append({
             'level': 'critical',
@@ -843,7 +889,7 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
     # ---------- Combined: Drift + Performance drop ----------
     has_drift = js_val >= js_thresh['warning'] or psi_val >= psi_thresh['warning']
     perf_drop = any(
-        latest.get(m, 999) < ALERT_THRESHOLDS[m].get('warning_below', 0)
+        latest.get(m, 999) < thresholds[m].get('warning_below', 0)
         for m in ['AUPRC', 'AUROC', 'F1 score']
     )
 

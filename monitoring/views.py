@@ -72,6 +72,7 @@ def dashboard_view(request):
                         'features': result['features'],
                         'target_col': result['target_col'],
                         'trend_window': form.cleaned_data.get('trend_window', 5),
+                        'alert_mode': form.cleaned_data.get('alert_mode', 'strict'),
                     }, CACHE_TIMEOUT)
 
                     # Save filenames to session for display
@@ -82,6 +83,7 @@ def dashboard_view(request):
                         'features': form.cleaned_data['features'],
                         'target_col': form.cleaned_data['target_col'],
                         'trend_window': form.cleaned_data.get('trend_window', 5),
+                        'alert_mode': form.cleaned_data.get('alert_mode', 'strict'),
                     }
 
                     messages.success(request, result['message'])
@@ -106,6 +108,7 @@ def dashboard_view(request):
             'features': uploaded_files.get('features', ''),
             'target_col': uploaded_files.get('target_col', 'Nadir90/100'),
             'trend_window': uploaded_files.get('trend_window', 5),
+            'alert_mode': uploaded_files.get('alert_mode', 'strict'),
         })
 
     # Build figure JSON and alerts if data is available
@@ -140,6 +143,7 @@ def dashboard_view(request):
                     final_feats=cached_data['features'],
                     target_col=cached_data['target_col'],
                     trend_window=cached_data.get('trend_window', 5),
+                    alert_mode=cached_data.get('alert_mode', 'strict'),
                 )
             except Exception as e:
                 alerts = [{'level': 'warning', 'title': '警告分析失敗',
