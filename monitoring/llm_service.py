@@ -43,9 +43,25 @@ def generate_llm_summary(report):
         )
 
         result = response['message']['content'].strip()
-        # 允許較長的分析報告（上限 300 字）
-        if len(result) > 300:
-            result = result[:297] + '...'
+
+        # Post-process: remove markdown formatting
+        import re
+        result = result.replace('**', '')
+        result = result.replace('##', '')
+        result = result.replace('# ', '')
+        result = re.sub(r'^---+\s*$', '', result, flags=re.MULTILINE)
+        result = re.sub(r'^- ', '・', result, flags=re.MULTILINE)
+        result = result.strip()
+
+        # Limit length (prompt asks for ≤250 chars, add buffer)
+        if len(result) > 350:
+            # Cut at last complete sentence within limit
+            trimmed = result[:350]
+            last_period = max(trimmed.rfind('。'), trimmed.rfind('。'), trimmed.rfind('\n'))
+            if last_period > 200:
+                result = trimmed[:last_period + 1]
+            else:
+                result = trimmed + '...'
         logger.info(f"[LLM] Response: {len(result)} chars")
         return result
 
