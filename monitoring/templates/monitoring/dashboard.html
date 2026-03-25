@@ -562,6 +562,301 @@
             line-height: 1.8;
             white-space: pre-line;
         }
+
+        /* Analysis Progress Steps */
+        .progress-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .progress-step {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 12px;
+            color: #475569;
+            transition: color 0.3s ease;
+        }
+
+        .progress-step.active {
+            color: #a5b4fc;
+        }
+
+        .progress-step.done {
+            color: #6ee7b7;
+        }
+
+        .step-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #334155;
+            flex-shrink: 0;
+            transition: all 0.3s ease;
+        }
+
+        .progress-step.active .step-dot {
+            background: #6366f1;
+            box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
+            animation: pulse-dot 1.2s ease-in-out infinite;
+        }
+
+        .progress-step.done .step-dot {
+            background: #10b981;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.5); }
+        }
+        .report-section {
+            margin-bottom: 16px;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 8px;
+            padding: 16px 20px;
+        }
+
+        .report-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .report-info-card {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 6px;
+            padding: 10px 12px;
+            text-align: center;
+        }
+
+        .report-info-label {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+
+        .report-info-value {
+            font-size: 15px;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .report-accuracy-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 14px;
+            padding: 8px 12px;
+            background: rgba(30, 41, 59, 0.4);
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .accuracy-correct { color: #6ee7b7; }
+        .accuracy-incorrect { color: #fca5a5; }
+
+        .report-subtitle {
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin: 12px 0 8px 0;
+        }
+
+        .safety-gates-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+
+        .gate-item {
+            flex: 1;
+            min-width: 120px;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid;
+            transition: all 0.25s ease;
+            cursor: default;
+        }
+
+        .gate-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .gate-pass {
+            background: rgba(16, 185, 129, 0.06);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .gate-pass:hover {
+            border-color: rgba(16, 185, 129, 0.6);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .gate-fail {
+            background: rgba(239, 68, 68, 0.06);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .gate-fail:hover {
+            border-color: rgba(239, 68, 68, 0.6);
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .gate-indicator {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            margin-bottom: 4px;
+        }
+
+        .gate-pass .gate-indicator { color: #10b981; }
+        .gate-fail .gate-indicator { color: #ef4444; }
+
+        .gate-metric {
+            font-size: 13px;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .gate-value {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 2px 0;
+        }
+
+        .gate-pass .gate-value { color: #6ee7b7; }
+        .gate-fail .gate-value { color: #fca5a5; }
+
+        .gate-threshold {
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        /* Gauge bar */
+        .gate-gauge {
+            width: 100%;
+            height: 6px;
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 3px;
+            margin-top: 8px;
+            position: relative;
+            overflow: visible;
+        }
+
+        .gate-gauge-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.6s ease;
+        }
+
+        .gate-pass .gate-gauge-fill {
+            background: linear-gradient(90deg, #065f46, #10b981);
+        }
+
+        .gate-fail .gate-gauge-fill {
+            background: linear-gradient(90deg, #991b1b, #ef4444);
+        }
+
+        .gate-gauge-threshold {
+            position: absolute;
+            top: -4px;
+            width: 2px;
+            height: 14px;
+            background: #fbbf24;
+            border-radius: 1px;
+        }
+
+        .gate-gauge-threshold::after {
+            content: attr(data-label);
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px;
+            color: #fbbf24;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .gate-item:hover .gate-gauge-threshold::after {
+            opacity: 1;
+        }
+
+        .additional-metrics-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .addl-metric {
+            padding: 5px 14px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 16px;
+            font-size: 13px;
+            color: #94a3b8;
+            position: relative;
+            cursor: help;
+            transition: all 0.2s ease;
+        }
+
+        .addl-metric:hover {
+            background: rgba(30, 41, 59, 0.8);
+            color: #e2e8f0;
+        }
+
+        .addl-metric .metric-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: #cbd5e1;
+            white-space: nowrap;
+            z-index: 100;
+            transition: all 0.2s ease;
+            pointer-events: none;
+        }
+
+        .addl-metric .metric-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .addl-metric:hover .metric-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .llm-summary-box {
+            padding: 12px 16px;
+            background: rgba(30, 41, 59, 0.5);
+            border-left: 3px solid #8b5cf6;
+            border-radius: 0 6px 6px 0;
+            font-size: 14px;
+            color: #cbd5e1;
+            line-height: 1.7;
+        }
     </style>
 </head>
 <body>
@@ -604,10 +899,42 @@
                         {% endfor %}
                     </div>
                     {% endfor %}
-                    <button type="submit" class="btn-primary">
+                    <button type="submit" class="btn-primary" id="submit-btn">
                         🚀 開始分析
                     </button>
                 </form>
+
+                <script>
+                    // Progress indicator on form submit
+                    document.querySelector('form').addEventListener('submit', function() {
+                        var btn = document.getElementById('submit-btn');
+                        btn.disabled = true;
+                        btn.innerHTML = '⏳ 分析中...';
+                        btn.style.opacity = '0.7';
+
+                        var progress = document.getElementById('analysis-progress');
+                        if (progress) {
+                            progress.style.display = 'block';
+                            var steps = [
+                                document.getElementById('step-1'),
+                                document.getElementById('step-2'),
+                                document.getElementById('step-3')
+                            ];
+                            // Activate steps sequentially
+                            steps[0].classList.add('active');
+                            setTimeout(function() {
+                                steps[0].classList.remove('active');
+                                steps[0].classList.add('done');
+                                steps[1].classList.add('active');
+                            }, 2000);
+                            setTimeout(function() {
+                                steps[1].classList.remove('active');
+                                steps[1].classList.add('done');
+                                steps[2].classList.add('active');
+                            }, 4000);
+                        }
+                    });
+                </script>
             </div>
 
             <!-- Status Card -->
@@ -635,6 +962,25 @@
                     請上傳 CSV 資料與模型檔案以開始分析。
                 </p>
                 {% endif %}
+
+                <!-- Analysis Progress (hidden by default, shown on submit) -->
+                <div id="analysis-progress" style="display: none; margin-top: 16px;">
+                    <div style="font-size: 13px; font-weight: 600; color: #a5b4fc; margin-bottom: 10px;">⏳ 分析進行中...</div>
+                    <div class="progress-steps">
+                        <div class="progress-step" id="step-1">
+                            <div class="step-dot"></div>
+                            <span>資料載入與預處理</span>
+                        </div>
+                        <div class="progress-step" id="step-2">
+                            <div class="step-dot"></div>
+                            <span>計算監控指標</span>
+                        </div>
+                        <div class="progress-step" id="step-3">
+                            <div class="step-dot"></div>
+                            <span>生成月報與 AI 分析</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -648,63 +994,80 @@
 
                 {% elif figure_json %}
                 <!-- Alerts Section -->
-                {% if alerts %}
-                <div class="alerts-section" id="alerts-section">
+
+
+                {% if monthly_report %}
+                <!-- Monthly Report Section -->
+                <div class="report-section" id="report-section">
                     <div class="alerts-header-row">
-                        <div class="alerts-header">🔍 模型監控分析報告</div>
-                        <button class="collapse-btn" id="alerts-collapse-btn" onclick="toggleAlertsSection()">
+                        <div class="alerts-header">模型監控月報</div>
+                        <button class="collapse-btn" id="report-collapse-btn" onclick="toggleReportSection()">
                             收合 ▲
                         </button>
                     </div>
-                    {% if analysis_info.start_date %}
-                    <div class="analysis-meta">
-                        📅 共 <strong>{{ analysis_info.total_windows }}</strong> 個時間窗口
-                        ｜趨勢分析取最近 <strong>{{ analysis_info.trend_windows }}</strong> 個窗口
-                        （<strong>{{ analysis_info.start_date }} ~ {{ analysis_info.end_date }}</strong>）
-                    </div>
-                    {% endif %}
-
-                    <!-- Horizontal badges -->
-                    <div class="badges-container" id="badges-container">
-                        {% for alert in alerts %}
-                        <button class="alert-badge badge-{{ alert.level }}"
-                                data-index="{{ forloop.counter0 }}"
-                                onclick="toggleBadgeDetail(this, {{ forloop.counter0 }})">
-                            <span class="badge-dot"></span>
-                            <span class="badge-label">{{ alert.category }}</span>
-                            <span class="badge-metric">{{ alert.metric|default:"" }}</span>
-                        </button>
-                        {% endfor %}
-                    </div>
-
-                    <!-- Expand/collapse control -->
-                    <button class="show-more-btn" id="show-more-btn" onclick="toggleDetails()">
-                        顯示更多 ▼
-                    </button>
-
-                    <!-- Expandable detail panel -->
-                    <div class="alert-details-panel" id="alert-details-panel" style="display:none;">
-                        {% for alert in alerts %}
-                        <div class="alert-detail-item alert-detail-{{ alert.level }}" id="alert-detail-{{ forloop.counter0 }}" style="display:none;">
-                            <div class="alert-detail-title">{{ alert.title }}</div>
-                            <div class="alert-detail-text">{{ alert.detail }}</div>
+                    <div id="report-content">
+                        <!-- Basic Info -->
+                        <div class="report-grid">
+                            <div class="report-info-card">
+                                <div class="report-info-label">模型版本</div>
+                                <div class="report-info-value">{{ monthly_report.basic_info.model_version }}</div>
+                            </div>
+                            <div class="report-info-card">
+                                <div class="report-info-label">監測期間</div>
+                                <div class="report-info-value">{{ monthly_report.basic_info.start_date }} ~ {{ monthly_report.basic_info.end_date }}</div>
+                            </div>
+                            <div class="report-info-card">
+                                <div class="report-info-label">總樣本</div>
+                                <div class="report-info-value">{{ monthly_report.basic_info.total }} 筆</div>
+                            </div>
+                            <div class="report-info-card">
+                                <div class="report-info-label">正例比例</div>
+                                <div class="report-info-value">{{ monthly_report.basic_info.prevalence }}%</div>
+                            </div>
                         </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
 
-                {% if llm_analysis %}
-                <!-- AI Analysis Report -->
-                <div class="ai-analysis-section" id="ai-analysis-section">
-                    <div class="alerts-header-row">
-                        <div class="alerts-header">🤖 AI 分析報告</div>
-                        <button class="collapse-btn" id="ai-collapse-btn" onclick="toggleAISection()">
-                            收合 ▲
-                        </button>
-                    </div>
-                    <div class="ai-analysis-content" id="ai-analysis-content">
-                        <div class="ai-analysis-text">{{ llm_analysis }}</div>
+                        <!-- Accuracy -->
+                        <div class="report-accuracy-row">
+                            <span class="accuracy-correct">預測正確：{{ monthly_report.basic_info.correct }} 筆（{{ monthly_report.basic_info.accuracy }}%）</span>
+                            <span class="accuracy-incorrect">預測錯誤：{{ monthly_report.basic_info.incorrect }} 筆（{{ monthly_report.basic_info.error_rate }}%）</span>
+                        </div>
+
+                        <!-- Safety Gates -->
+                        <div class="report-subtitle">安全閘門</div>
+                        <div class="safety-gates-row">
+                            {% for gate in monthly_report.safety_gates %}
+                            <div class="gate-item {% if gate.passed %}gate-pass{% else %}gate-fail{% endif %}">
+                                <div class="gate-indicator">{% if gate.passed %}PASS{% else %}FAIL{% endif %}</div>
+                                <div class="gate-metric">{{ gate.label }}</div>
+                                <div class="gate-value">{{ gate.value }}</div>
+                                <div class="gate-threshold">門檻 {{ gate.threshold }}</div>
+                                <div class="gate-gauge">
+                                    <div class="gate-gauge-fill" style="width: {{ gate.gauge_pct }}%"></div>
+                                    <div class="gate-gauge-threshold" style="left: {{ gate.threshold_pct }}%" data-label="門檻"></div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Additional Metrics -->
+                        <div class="report-subtitle">附加指標</div>
+                        <div class="additional-metrics-row">
+                            <span class="addl-metric">F1: {{ monthly_report.additional.F1 }}
+                                <span class="metric-tooltip">模型識別正樣本的能力 | 越高越好</span>
+                            </span>
+                            <span class="addl-metric">ECE: {{ monthly_report.additional.ECE }}
+                                <span class="metric-tooltip">模型的預測準確度 | 越低越好</span>
+                            </span>
+                            <span class="addl-metric">Brier: {{ monthly_report.additional.Brier }}
+                                <span class="metric-tooltip">預測的信心與實際結果的差距 | 越低越好</span>
+                            </span>
+                        </div>
+
+                        <!-- LLM Summary -->
+                        {% if llm_summary %}
+                        <div class="report-subtitle">AI 分析摘要</div>
+                        <div class="llm-summary-box">{{ llm_summary }}</div>
+                        {% endif %}
                     </div>
                 </div>
                 {% endif %}
@@ -852,6 +1215,19 @@
                     function toggleAISection() {
                         var content = document.getElementById('ai-analysis-content');
                         var btn = document.getElementById('ai-collapse-btn');
+                        if (content.style.display === 'none') {
+                            content.style.display = 'block';
+                            btn.textContent = '收合 ▲';
+                        } else {
+                            content.style.display = 'none';
+                            btn.textContent = '展開 ▼';
+                        }
+                    }
+
+                    // === Monthly Report Section Toggle ===
+                    function toggleReportSection() {
+                        var content = document.getElementById('report-content');
+                        var btn = document.getElementById('report-collapse-btn');
                         if (content.style.display === 'none') {
                             content.style.display = 'block';
                             btn.textContent = '收合 ▲';

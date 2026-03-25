@@ -939,3 +939,205 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
     }
 
     return alerts, analysis_info
+
+
+# ==========================================
+# 8. Monthly Report Generation
+# ==========================================
+
+SAFETY_GATES = {
+    'Sensitivity': {'min': 0.70, 'label': 'Sensitivity'},
+    'FPR':         {'max': 0.35, 'label': 'FPR'},
+    'AUPRC':       {'min': 0.40, 'label': 'AUPRC'},
+    'AUROC':       {'min': 0.70, 'label': 'AUROC'},
+}
+
+
+def generate_monthly_report(windows, baseline_data, dates, model,
+                            final_feats, target_col, model_version='未知',
+                            trend_window=None):
+    """
+    Generate a structured monthly monitoring report with per-sample accuracy.
+
+    Returns:
+        dict with keys:
+            'basic_info': model version, date range, sample counts, accuracy
+            'safety_gates': list of dicts with metric/value/threshold/passed
+            'additional': ECE, Brier, F1 values
+            'all_passed': bool — True if ALL safety gates passed
+            'llm_prompt': pre-built prompt string ready for LLM
+    """
+    import sklearn.metrics as skm
+
+    report = {
+        'basic_info': {},
+        'safety_gates': [],
+        'additional': {},
+        'all_passed': True,
+        'llm_prompt': '',
+    }
+
+    if not windows or len(windows) < 1:
+        report['basic_info'] = {'error': '無可用資料'}
+        return report
+
+    # Apply trend_window: only use the last N windows
+    if trend_window and trend_window < len(windows):
+        analysis_windows = windows[-trend_window:]
+        analysis_dates = dates[-trend_window:] if dates else []
+    else:
+        analysis_windows = windows
+        analysis_dates = dates if dates else []
+
+    # --- Aggregate all predictions across selected windows ---
+    all_y_true = []
+    all_y_pred = []
+    all_y_prob = []
+
+    for w_df in analysis_windows:
+        try:
+            X = w_df[final_feats]
+            y = w_df[target_col]
+            y_pred = model.predict(X).astype(float)
+            y_prob = model.predict_proba(X)[:, 1]
+
+            all_y_true.extend(y.tolist())
+            all_y_pred.extend(y_pred.tolist())
+            all_y_prob.extend(y_prob.tolist())
+        except Exception:
+            continue
+
+    if len(all_y_true) < 10:
+        report['basic_info'] = {'error': '有效樣本不足'}
+        return report
+
+    y_true = np.array(all_y_true)
+    y_pred = np.array(all_y_pred)
+    y_prob = np.array(all_y_prob)
+
+    total = len(y_true)
+    positive = int(y_true.sum())
+    negative = total - positive
+    prevalence = positive / total * 100
+
+    # Confusion matrix
+    tp = int(((y_pred == 1) & (y_true == 1)).sum())
+    tn = int(((y_pred == 0) & (y_true == 0)).sum())
+    fp = int(((y_pred == 1) & (y_true == 0)).sum())
+    fn = int(((y_pred == 0) & (y_true == 1)).sum())
+    correct = tp + tn
+    incorrect = fp + fn
+    accuracy = correct / total * 100
+
+    # Date range (based on selected analysis windows)
+    start_date = analysis_dates[0] if analysis_dates else None
+    end_date = analysis_dates[-1] if analysis_dates else None
+
+    report['basic_info'] = {
+        'model_version': model_version,
+        'start_date': start_date.strftime('%Y/%m/%d') if hasattr(start_date, 'strftime') else str(start_date)[:10] if start_date else '?',
+        'end_date': end_date.strftime('%Y/%m/%d') if hasattr(end_date, 'strftime') else str(end_date)[:10] if end_date else '?',
+        'total': total,
+        'positive': positive,
+        'negative': negative,
+        'prevalence': round(prevalence, 2),
+        'correct': correct,
+        'incorrect': incorrect,
+        'accuracy': round(accuracy, 2),
+        'error_rate': round(100 - accuracy, 2),
+        'tp': tp, 'tn': tn, 'fp': fp, 'fn': fn,
+    }
+
+    # --- Safety Gate Metrics ---
+    # Sensitivity = TP / (TP + FN)
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    # FPR = FP / (FP + TN)
+    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+    # AUROC
+    try:
+        auroc = roc_auc_score(y_true, y_prob)
+    except Exception:
+        auroc = 0.5
+    # AUPRC
+    try:
+        prec_curve, rec_curve, _ = precision_recall_curve(y_true, y_prob)
+        auprc = auc(rec_curve, prec_curve)
+    except Exception:
+        auprc = 0.0
+
+    gate_values = {
+        'Sensitivity': round(sensitivity, 4),
+        'FPR': round(fpr, 4),
+        'AUPRC': round(auprc, 4),
+        'AUROC': round(auroc, 4),
+    }
+
+    for metric_name, gate in SAFETY_GATES.items():
+        val = gate_values[metric_name]
+        if 'min' in gate:
+            passed = val >= gate['min']
+            threshold_str = f">= {gate['min']}"
+            # Gauge: value as % of 1.0 scale
+            gauge_pct = min(val * 100, 100)
+            threshold_pct = gate['min'] * 100
+        else:
+            passed = val <= gate['max']
+            threshold_str = f"<= {gate['max']}"
+            # For FPR (lower is better): show value on 0-1 scale
+            gauge_pct = min(val * 100, 100)
+            threshold_pct = gate['max'] * 100
+
+        if not passed:
+            report['all_passed'] = False
+
+        report['safety_gates'].append({
+            'metric': metric_name,
+            'label': gate['label'],
+            'value': val,
+            'threshold': threshold_str,
+            'passed': passed,
+            'gauge_pct': round(gauge_pct, 1),
+            'threshold_pct': round(threshold_pct, 1),
+            'is_lower_better': 'max' in gate,
+        })
+
+    # --- Additional Metrics ---
+    f1 = f1_score(y_true, y_pred, pos_label=1.0)
+    ece_val = calculate_ece(y_true, y_prob)
+    brier_val = calculate_brier(y_true, y_prob)
+
+    report['additional'] = {
+        'F1': round(f1, 4),
+        'ECE': round(ece_val, 4),
+        'Brier': round(brier_val, 4),
+    }
+
+    # --- Build LLM prompt ---
+    info = report['basic_info']
+    gates_lines = []
+    for g in report['safety_gates']:
+        status = '[達標]' if g['passed'] else '[未達標]'
+        gates_lines.append(
+            f"{g['metric']}: {g['value']} (門檻{g['threshold']}) {status}"
+        )
+
+    report['llm_prompt'] = (
+        f"你是醫療AI模型監控專家。根據以下IDH（血液透析中低血壓）預測模型的監控指標，寫一段200-300字的分析報告。\n"
+        f"要求：不使用emoji，語氣專業但易懂。\n"
+        f"分析重點：\n"
+        f"1. 根據指標異常組合，推測模型效能變化的可能根本原因（例如：資料族群改變、季節性因素、資料收集流程變更等）\n"
+        f"2. 各指標間的因果關聯（例如：Sensitivity未達標是否與資料分布偏移有關？ECE偏差是否暗示模型信心已失準？）\n"
+        f"3. 提出具體改善建議，依優先順序排列\n\n"
+        f"--- 監控數據 ---\n"
+        f"模型版本：{info['model_version']}\n"
+        f"監測期間：{info['start_date']}~{info['end_date']}\n"
+        f"總樣本：{info['total']}筆，正例比例：{info['prevalence']}%\n"
+        f"預測正確：{info['correct']}筆（{info['accuracy']}%）\n"
+        f"預測錯誤：{info['incorrect']}筆（{round(100 - info['accuracy'], 2)}%）\n"
+        f"{chr(10).join(gates_lines)}\n"
+        f"F1: {report['additional']['F1']}\n"
+        f"ECE: {report['additional']['ECE']} / Brier: {report['additional']['Brier']}\n"
+    )
+
+    return report
+

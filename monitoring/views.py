@@ -10,8 +10,8 @@ from django.core.cache import cache
 import plotly.utils
 
 from .forms import MonitoringForm
-from .services import load_and_process, build_dashboard_figure, generate_alerts
-from .llm_service import generate_llm_analysis
+from .services import load_and_process, build_dashboard_figure, generate_alerts, generate_monthly_report
+from .llm_service import generate_llm_summary
 
 
 CACHE_KEY = 'monitoring_data_default'
@@ -117,7 +117,8 @@ def dashboard_view(request):
     figure_error = None
     alerts = []
     analysis_info = {}
-    llm_analysis = None
+    monthly_report = None
+    llm_summary = None
     if has_data:
         cached_data = cache.get(CACHE_KEY)
         if cached_data:
@@ -152,11 +153,21 @@ def dashboard_view(request):
                            'detail': str(e), 'metric': None, 'value': None}]
                 analysis_info = {}
 
-            # Generate LLM analysis (only if there are abnormal alerts)
+            # Generate monthly report
             try:
-                llm_analysis = generate_llm_analysis(alerts, analysis_info)
+                monthly_report = generate_monthly_report(
+                    windows=cached_data['windows'],
+                    baseline_data=cached_data['baseline'],
+                    dates=cached_data['dates'],
+                    model=cached_data['model'],
+                    final_feats=cached_data['features'],
+                    target_col=cached_data['target_col'],
+                    model_version=uploaded_files.get('model_file', '未知'),
+                    trend_window=cached_data.get('trend_window', 5),
+                )
+                llm_summary = generate_llm_summary(monthly_report)
             except Exception as e:
-                llm_analysis = f"⚠️ AI 分析暫時無法使用（{str(e)}）"
+                llm_summary = f"報告生成失敗（{str(e)}）"
 
     context = {
         'form': form,
@@ -166,6 +177,7 @@ def dashboard_view(request):
         'figure_error': figure_error,
         'alerts': alerts,
         'analysis_info': analysis_info,
-        'llm_analysis': llm_analysis,
+        'monthly_report': monthly_report,
+        'llm_summary': llm_summary,
     }
     return render(request, 'monitoring/dashboard.html', context)
