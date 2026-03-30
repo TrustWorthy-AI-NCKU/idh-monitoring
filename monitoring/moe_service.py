@@ -252,6 +252,7 @@ class MoESklearnWrapper:
         self.moe = moe_model
         # Expose feature_names_in_ so load_and_process can auto-detect features
         self.feature_names_in_ = []
+        self.is_moe = True  # Flag to tell services.py to pass full dataframe
 
     def predict_proba(self, X):
         """Returns (N, 2) array like sklearn, column 0 = neg, column 1 = pos."""

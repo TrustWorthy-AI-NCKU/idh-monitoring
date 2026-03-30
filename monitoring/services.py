@@ -386,7 +386,8 @@ def build_dashboard_figure(windows, baseline_data, dates, model, final_feats, ta
     for i in range(total):
         try:
             w_df = windows[i]
-            mets, _ = get_metrics(model, w_df[final_feats], w_df[target_col])
+            X_infer = w_df if getattr(model, 'is_moe', False) else w_df[final_feats]
+            mets, _ = get_metrics(model, X_infer, w_df[target_col])
             avg_js, scores = compute_features_drift(baseline, w_df, final_feats)
 
             if mets:
@@ -609,10 +610,10 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
 
     for i, w_df in enumerate(windows):
         try:
-            X = w_df[final_feats]
+            X_infer = w_df if getattr(model, 'is_moe', False) else w_df[final_feats]
             y = w_df[target_col]
 
-            mets, _ = get_metrics(model, X, y)
+            mets, _ = get_metrics(model, X_infer, y)
             avg_js, _ = compute_features_drift(baseline, w_df, final_feats)
             if mets:
                 # Existing metrics
@@ -621,8 +622,8 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
 
                 # --- New metrics (computed but not plotted) ---
                 try:
-                    y_prob = model.predict_proba(X)[:, 1]
-                    y_prob_all = model.predict_proba(X)
+                    y_prob = model.predict_proba(X_infer)[:, 1]
+                    y_prob_all = model.predict_proba(X_infer)
 
                     mets['PSI'] = compute_avg_psi(baseline, w_df, final_feats)
                     mets['ECE'] = calculate_ece(y, y_prob)
@@ -1012,10 +1013,10 @@ def generate_monthly_report(windows, baseline_data, dates, model,
 
     for w_df in analysis_windows:
         try:
-            X = w_df[final_feats]
+            X_infer = w_df if getattr(model, 'is_moe', False) else w_df[final_feats]
             y = w_df[target_col]
-            y_pred = model.predict(X).astype(float)
-            y_prob = model.predict_proba(X)[:, 1]
+            y_pred = model.predict(X_infer).astype(float)
+            y_prob = model.predict_proba(X_infer)[:, 1]
 
             all_y_true.extend(y.tolist())
             all_y_pred.extend(y_pred.tolist())

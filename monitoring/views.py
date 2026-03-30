@@ -366,9 +366,7 @@ def dashboard_view(request):
                             all_dfs.append(w_df)
                         combined = pd.concat(all_dfs, ignore_index=True)
 
-                        feats_with_date = ['Session_Date'] + cached_data['features']
-                        available = [f for f in feats_with_date if f in combined.columns]
-                        X_moe = combined[available].copy()
+                        X_moe = combined.copy()
                         y_moe = combined[cached_data['target_col']].copy()
 
                         moe_metrics, _, _ = moe_model.evaluate(X_moe, y_moe)
