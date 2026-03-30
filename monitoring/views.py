@@ -3,6 +3,7 @@ Views for the monitoring app.
 """
 import os
 import json
+import logging
 import tempfile
 from django.shortcuts import render, redirect
 from django.contrib import messages
@@ -13,6 +14,8 @@ from .forms import MonitoringForm
 from .services import load_and_process, build_dashboard_figure, generate_alerts, generate_monthly_report
 from .llm_service import generate_llm_summary
 from .moe_service import MoEModel
+
+logger = logging.getLogger(__name__)
 
 
 CACHE_KEY = 'monitoring_data_default'
@@ -149,6 +152,7 @@ def dashboard_view(request):
                     }
                     messages.success(request, result['message'])
                 else:
+                    logger.error(f"[dashboard] load_and_process failed: {result['message']}")
                     messages.error(request, result['message'])
 
             # ======================================================
@@ -245,6 +249,7 @@ def dashboard_view(request):
                 messages.success(request, result['message'])
 
         except Exception as e:
+            logger.exception(f"[dashboard] Unhandled error during POST: {e}")
             messages.error(request, f'處理錯誤: {str(e)}')
 
         finally:

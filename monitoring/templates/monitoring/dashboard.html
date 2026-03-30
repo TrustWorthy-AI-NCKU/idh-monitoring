@@ -1364,25 +1364,30 @@
                 </p>
                 {% endif %}
 
-                <!-- Analysis Progress (hidden by default, shown on submit) -->
+                <!-- Analysis Progress -->
+                {% if has_data %}
+                <!-- Already loaded: show completed state -->
+                <div style="margin-top: 16px;">
+                    <div style="font-size: 13px; font-weight: 600; color: #6ee7b7; margin-bottom: 10px;">✅ 分析完成</div>
+                    <div class="progress-steps">
+                        <div class="progress-step done"><div class="step-dot"></div><span>資料載入與預處理</span></div>
+                        <div class="progress-step done"><div class="step-dot"></div><span>計算監控指標</span></div>
+                        <div class="progress-step done"><div class="step-dot"></div><span>生成月報與 AI 分析</span></div>
+                    </div>
+                </div>
+                {% else %}
+                <!-- Not loaded: show animated progress only while submitting -->
                 <div id="analysis-progress" style="display: none; margin-top: 16px;">
                     <div style="font-size: 13px; font-weight: 600; color: #a5b4fc; margin-bottom: 10px;">⏳ 分析進行中...</div>
                     <div class="progress-steps">
-                        <div class="progress-step" id="step-1">
-                            <div class="step-dot"></div>
-                            <span>資料載入與預處理</span>
-                        </div>
-                        <div class="progress-step" id="step-2">
-                            <div class="step-dot"></div>
-                            <span>計算監控指標</span>
-                        </div>
-                        <div class="progress-step" id="step-3">
-                            <div class="step-dot"></div>
-                            <span>生成月報與 AI 分析</span>
-                        </div>
+                        <div class="progress-step" id="step-1"><div class="step-dot"></div><span>資料載入與預處理</span></div>
+                        <div class="progress-step" id="step-2"><div class="step-dot"></div><span>計算監控指標</span></div>
+                        <div class="progress-step" id="step-3"><div class="step-dot"></div><span>生成月報與 AI 分析</span></div>
                     </div>
                 </div>
+                {% endif %}
             </div>
+
         </div>
 
         <!-- Dashboard Area -->
