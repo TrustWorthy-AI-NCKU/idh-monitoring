@@ -5,8 +5,8 @@ from django import forms
 
 
 class MonitoringForm(forms.Form):
-    """Form for uploading monitoring data files."""
-    
+    """Form for uploading monitoring data files (single EBM model)."""
+
     data_file = forms.FileField(
         label='Dataset (CSV)',
         help_text='上傳要監控的資料集 (.csv)',
@@ -15,7 +15,7 @@ class MonitoringForm(forms.Form):
             'class': 'form-control',
         })
     )
-    
+
     train_file = forms.FileField(
         label='Baseline Data (CSV)',
         required=False,
@@ -27,7 +27,7 @@ class MonitoringForm(forms.Form):
             'class': 'form-control',
         })
     )
-    
+
     model_file = forms.FileField(
         label='Model (Joblib)',
         help_text='上傳模型檔案 (.joblib)',
@@ -36,7 +36,7 @@ class MonitoringForm(forms.Form):
             'class': 'form-control',
         })
     )
-    
+
     features = forms.CharField(
         label='Features',
         initial='Sex, Age, Pre_HD_SBP, Start_DBP, Heart_Rate, Respiratory_Rate, '
@@ -49,7 +49,7 @@ class MonitoringForm(forms.Form):
             'placeholder': '以逗號分隔的特徵名稱',
         })
     )
-    
+
     target_col = forms.CharField(
         label='Target Column',
         initial='Nadir90/100',
@@ -69,15 +69,48 @@ class MonitoringForm(forms.Form):
         })
     )
 
-    # alert_mode = forms.ChoiceField(
-    #     label='alert模式',
-    #     choices=[
-    #         ('strict', '一般監控模式 (嚴格 - 及早預警)'),
-    #         ('loose', '異常診斷模式 (寬鬆 - 減少干擾)'),
-    #     ],
-    #     initial='strict',
-    #     help_text='嚴格模式適用於日常監控；若是已知模型異常，可切換至寬鬆模式以專注於最嚴重的偏差。',
-    #     widget=forms.Select(attrs={
-    #         'class': 'form-control',
-    #     })
-    # )
+    # --- Comparison fields (optional, for "比較模型" tab) ---
+
+    enable_comparison = forms.BooleanField(
+        required=False,
+        initial=False,
+        widget=forms.HiddenInput(attrs={'id': 'id_enable_comparison'}),
+    )
+
+    comparison_model_type = forms.ChoiceField(
+        label='比較模型類型',
+        choices=[
+            ('ebm', 'EBM'),
+            ('moe', 'MoE (Optuna)'),
+        ],
+        initial='moe',
+        required=False,
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+            'id': 'id_comparison_model_type',
+        })
+    )
+
+    # For EBM comparison: just a model file
+    comparison_ebm_model = forms.FileField(
+        label='比較 EBM Model (Joblib)',
+        required=False,
+        widget=forms.ClearableFileInput(attrs={
+            'accept': '.joblib',
+            'class': 'form-control',
+        })
+    )
+
+    # For MoE comparison: meta-learner + experts
+    moe_meta_learner = forms.FileField(
+        label='MoE Meta-Learner (Joblib)',
+        required=False,
+        help_text='包含 GB 模型、Scaler、Config 的 .joblib 檔案',
+        widget=forms.ClearableFileInput(attrs={
+            'accept': '.joblib',
+            'class': 'form-control',
+        })
+    )
+
+    # Expert files are handled dynamically via JavaScript
+    # They will be retrieved from request.FILES.getlist('moe_expert_files')

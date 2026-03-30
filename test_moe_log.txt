@@ -1,0 +1,51 @@
+﻿python : C:\Users\Q56144018\Documents\IDH\code\idh_monitoring\test_moe.py:55: 
+ChainedAssignmentError: A value is being set on a copy of a DataFrame or Serie
+s through chained assignment using an inplace method.
+位於 線路:1 字元:1
++ python test_moe.py 2>&1 | Out-File -Encoding utf8 test_moe_log.txt
++ ~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\Q56144...inplace method 
+   .:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Such inplace method never works to update the original DataFrame or Series, be
+cause the intermediate object on which we are setting values always behaves as
+ a copy (due to Copy-on-Write).
+
+For example, when doing 'df[col].method(value, inplace=True)', try using 'df.m
+ethod({col: value}, inplace=True)' instead, to perform the operation inplace o
+n the original object, or try to avoid an inplace operation using 'df[col] = d
+f[col].method(value)'.
+
+See the documentation for a more detailed explanation: https://pandas.pydata.o
+rg/pandas-docs/stable/user_guide/copy_on_write.html
+  X[col].fillna(0, inplace=True)
+C:\Users\Q56144018\Documents\IDH\code\django_env\Lib\site-packages\interpret\u
+tils\_clean_x.py:2164: UserWarning: Extra columns present in X that are not us
+ed by the model.
+  warn("Extra columns present in X that are not used by the model.")
+Loading MoE model...
+Loading test data (first 500 rows)...
+Running evaluation...
+
+=== MoE Results (500 samples) ===
+  auprc: 0.022
+  auroc: 0.8759
+  f1: 0.0
+  sensitivity: 0.0
+  fpr: 0.0
+  precision: 0.0
+  recall: 0.0
+  accuracy: 99.4
+  total: 500
+  correct: 497
+  incorrect: 3
+  tp: 0
+  tn: 497
+  fp: 0
+  fn: 3
+
+  Prob range: [0.0034, 0.4743]
+  Prob mean:  0.0317
+
+Done!

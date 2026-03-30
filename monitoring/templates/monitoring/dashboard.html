@@ -192,6 +192,140 @@
             transform: translateY(0);
         }
 
+        /* Model Tabs */
+        .model-tabs {
+            display: flex;
+            margin-bottom: 16px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+
+        .model-tab {
+            flex: 1;
+            padding: 10px 16px;
+            background: rgba(15, 23, 42, 0.4);
+            border: none;
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .model-tab:first-child {
+            border-right: 1px solid rgba(99, 102, 241, 0.2);
+        }
+
+        .model-tab.active {
+            background: rgba(99, 102, 241, 0.15);
+            color: #a5b4fc;
+        }
+
+        .model-tab:hover:not(.active) {
+            background: rgba(99, 102, 241, 0.08);
+            color: #94a3b8;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* MoE Dynamic Fields */
+        .moe-section {
+            border: 1px dashed rgba(99, 102, 241, 0.25);
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 12px;
+            background: rgba(99, 102, 241, 0.03);
+        }
+
+        .moe-section-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #818cf8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 12px;
+        }
+
+        .expert-entry {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .expert-entry .form-control {
+            flex: 1;
+        }
+
+        .btn-remove-expert {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            background: rgba(239, 68, 68, 0.08);
+            color: #f87171;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .btn-remove-expert:hover {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: rgba(239, 68, 68, 0.5);
+        }
+
+        .btn-add-expert {
+            width: 100%;
+            padding: 8px;
+            border: 1px dashed rgba(99, 102, 241, 0.3);
+            border-radius: 8px;
+            background: rgba(99, 102, 241, 0.05);
+            color: #818cf8;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: 'Inter', sans-serif;
+            margin-top: 8px;
+        }
+
+        .btn-add-expert:hover {
+            background: rgba(99, 102, 241, 0.12);
+            border-color: rgba(99, 102, 241, 0.5);
+        }
+
+        .comparison-divider {
+            border-top: 1px solid rgba(99, 102, 241, 0.15);
+            margin: 16px 0;
+            position: relative;
+        }
+
+        .comparison-divider::after {
+            content: 'VS';
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(30, 41, 59, 0.9);
+            padding: 2px 10px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #818cf8;
+            border-radius: 4px;
+        }
+
         /* Messages */
         .messages {
             list-style: none;
@@ -885,28 +1019,291 @@
 
             <div class="card">
                 <div class="card-title">資料上傳</div>
-                <form method="post" enctype="multipart/form-data">
+
+                <!-- Model Tabs -->
+                <div class="model-tabs">
+                    <button type="button" class="model-tab active" onclick="switchTab('single')">單一模型</button>
+                    <button type="button" class="model-tab" onclick="switchTab('compare')">比較模型</button>
+                </div>
+
+                <form method="post" enctype="multipart/form-data" id="upload-form">
                     {% csrf_token %}
-                    {% for field in form %}
-                    <div class="form-group">
-                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.help_text %}
-                        <div class="help-text">{{ field.help_text }}</div>
-                        {% endif %}
-                        {% for error in field.errors %}
-                        <div class="help-text" style="color: #fca5a5;">{{ error }}</div>
-                        {% endfor %}
+
+                    <!-- Hidden field: enable_comparison -->
+                    <input type="hidden" name="enable_comparison" id="id_enable_comparison" value="">
+
+                    <!-- ==================== TAB 1: Single Model ==================== -->
+                    <div id="tab-single" class="tab-content active">
+                        <div class="form-group">
+                            <label for="id_data_file">Dataset (CSV)</label>
+                            {{ form.data_file }}
+                            <div class="help-text">上傳要監控的資料集 (.csv)</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="id_features">Features</label>
+                            {{ form.features }}
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div class="form-group">
+                                <label for="id_target_col">Target Column</label>
+                                {{ form.target_col }}
+                            </div>
+                            <div class="form-group">
+                                <label for="id_trend_window">分析窗格數</label>
+                                {{ form.trend_window }}
+                            </div>
+                        </div>
+
+                        <!-- Model Type Selector -->
+                        <div class="form-group">
+                            <label>模型類型</label>
+                            <select name="single_model_type" id="id_single_type" class="form-control">
+                                <option value="ebm">EBM</option>
+                                <option value="moe">MoE (Optuna)</option>
+                            </select>
+                        </div>
+
+                        <!-- Single: EBM fields -->
+                        <div id="single-ebm-fields">
+                            <div class="form-group">
+                                <label for="id_model_file">Model (Joblib)</label>
+                                {{ form.model_file }}
+                                <div class="help-text">上傳 EBM 模型檔案 (.joblib)</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="id_train_file">Baseline Data (CSV)</label>
+                                {{ form.train_file }}
+                                <div class="help-text">選填，作為 JS Divergence baseline</div>
+                            </div>
+                        </div>
+
+                        <!-- Single: MoE fields -->
+                        <div id="single-moe-fields" style="display: none;">
+                            <div class="moe-section">
+                                <div class="moe-section-label">🧠 MoE 模型組件</div>
+                                <div class="form-group">
+                                    <label>Gating Network (Joblib)</label>
+                                    <input type="file" name="single_meta_learner" accept=".joblib" class="form-control">
+                                    <div class="help-text">包含 Gating 模型 + Scaler + Config</div>
+                                </div>
+                                <label style="margin-bottom: 8px;">Expert Models (Joblib)</label>
+                                <div id="single-expert-list">
+                                    <div class="expert-entry">
+                                        <input type="file" name="single_expert_files" accept=".joblib" class="form-control">
+                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'single-expert-list')" title="移除">×</button>
+                                    </div>
+                                    <div class="expert-entry">
+                                        <input type="file" name="single_expert_files" accept=".joblib" class="form-control">
+                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'single-expert-list')" title="移除">×</button>
+                                    </div>
+                                    <div class="expert-entry">
+                                        <input type="file" name="single_expert_files" accept=".joblib" class="form-control">
+                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'single-expert-list')" title="移除">×</button>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-add-expert" onclick="addExpert('single_expert_files', 'single-expert-list')">＋ 新增 Expert</button>
+                            </div>
+                        </div>
                     </div>
-                    {% endfor %}
-                    <button type="submit" class="btn-primary" id="submit-btn">
+
+                    <!-- ==================== TAB 2: Comparison ==================== -->
+                    <div id="tab-compare" class="tab-content">
+
+                        <!-- Shared fields -->
+                        <div class="form-group">
+                            <label>Dataset (CSV)</label>
+                            <input type="file" name="data_file" accept=".csv" class="form-control">
+                            <div class="help-text">上傳要監控的資料集（兩個模型共用）</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Features</label>
+                            <textarea name="features" rows="3" class="form-control">Sex, Age, Pre_HD_SBP, Start_DBP, Heart_Rate, Respiratory_Rate, Blood_Flow_Rate, Dialysate_Temperature, Dialysate_Flow_Rate, Pre_HD_Weight, UF_BW_Perc, Body_Temperature, Dry_Weight, Target_UF_Volume, IDH_N_28D, IDH_N_7D</textarea>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div class="form-group">
+                                <label>Target Column</label>
+                                <input type="text" name="target_col" value="Nadir90/100" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>分析窗格數</label>
+                                <input type="number" name="trend_window" value="5" min="2" max="50" class="form-control">
+                            </div>
+                        </div>
+
+                        <!-- ===== Model 1 ===== -->
+                        <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px; margin-top: 8px;">
+                            <strong style="color: #a5b4fc;">Model 1</strong>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Model 1 類型</label>
+                            <select name="m1_type" id="id_m1_type" class="form-control">
+                                <option value="ebm">EBM</option>
+                                <option value="moe">MoE (Optuna)</option>
+                            </select>
+                        </div>
+
+                        <!-- M1: EBM fields -->
+                        <div id="m1-ebm-fields">
+                            <div class="form-group">
+                                <label>Model 1 — EBM Model (Joblib)</label>
+                                <input type="file" name="model_file" accept=".joblib" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Model 1 — Baseline Data (CSV)</label>
+                                <input type="file" name="train_file" accept=".csv" class="form-control">
+                                <div class="help-text">選填，作為 JS Divergence baseline</div>
+                            </div>
+                        </div>
+
+                        <!-- M1: MoE fields -->
+                        <div id="m1-moe-fields" style="display: none;">
+                            <div class="moe-section">
+                                <div class="moe-section-label">🧠 Model 1 — MoE 組件</div>
+                                <div class="form-group">
+                                    <label>Gating Network (Joblib)</label>
+                                    <input type="file" name="m1_meta_learner" accept=".joblib" class="form-control">
+                                    <div class="help-text">包含 Gating 模型 + Scaler + Config</div>
+                                </div>
+                                <label style="margin-bottom: 8px;">Expert Models (Joblib)</label>
+                                <div id="m1-expert-list">
+                                    <div class="expert-entry">
+                                        <input type="file" name="m1_expert_files" accept=".joblib" class="form-control">
+                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm1-expert-list')" title="移除">×</button>
+                                    </div>
+                                    <div class="expert-entry">
+                                        <input type="file" name="m1_expert_files" accept=".joblib" class="form-control">
+                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm1-expert-list')" title="移除">×</button>
+                                    </div>
+                                    <div class="expert-entry">
+                                        <input type="file" name="m1_expert_files" accept=".joblib" class="form-control">
+                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm1-expert-list')" title="移除">×</button>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-add-expert" onclick="addExpert('m1_expert_files', 'm1-expert-list')">＋ 新增 Expert</button>
+                            </div>
+                        </div>
+
+                        <div class="comparison-divider"></div>
+
+                        <!-- ===== Model 2 ===== -->
+                        <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">
+                            <strong style="color: #fbbf24;">Model 2</strong>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Model 2 類型</label>
+                            <select name="m2_type" id="id_m2_type" class="form-control">
+                                <option value="ebm">EBM</option>
+                                <option value="moe" selected>MoE (Optuna)</option>
+                            </select>
+                        </div>
+
+                        <!-- M2: EBM fields -->
+                        <div id="m2-ebm-fields" style="display: none;">
+                            <div class="form-group">
+                                <label>Model 2 — EBM Model (Joblib)</label>
+                                <input type="file" name="m2_ebm_model" accept=".joblib" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Model 2 — Training Data (CSV)</label>
+                                <input type="file" name="m2_train_file" accept=".csv" class="form-control">
+                                <div class="help-text">Model 2 的訓練資料，用於 JS Divergence baseline</div>
+                            </div>
+                        </div>
+
+                        <!-- M2: MoE fields -->
+                        <div id="m2-moe-fields">
+                            <div class="moe-section">
+                                <div class="moe-section-label">🧠 Model 2 — MoE 組件</div>
+                                <div class="form-group">
+                                    <label>Gating Network (Joblib)</label>
+                                    <input type="file" name="m2_meta_learner" accept=".joblib" class="form-control">
+                                    <div class="help-text">包含 Gating 模型 + Scaler + Config</div>
+                                </div>
+                                <label style="margin-bottom: 8px;">Expert Models (Joblib)</label>
+                                <div id="m2-expert-list">
+                                    <div class="expert-entry">
+                                        <input type="file" name="m2_expert_files" accept=".joblib" class="form-control">
+                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm2-expert-list')" title="移除">×</button>
+                                    </div>
+                                    <div class="expert-entry">
+                                        <input type="file" name="m2_expert_files" accept=".joblib" class="form-control">
+                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm2-expert-list')" title="移除">×</button>
+                                    </div>
+                                    <div class="expert-entry">
+                                        <input type="file" name="m2_expert_files" accept=".joblib" class="form-control">
+                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm2-expert-list')" title="移除">×</button>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-add-expert" onclick="addExpert('m2_expert_files', 'm2-expert-list')">＋ 新增 Expert</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary" id="submit-btn" style="margin-top: 16px;">
                         🚀 開始分析
                     </button>
                 </form>
 
                 <script>
-                    // Progress indicator on form submit
-                    document.querySelector('form').addEventListener('submit', function() {
+                    // === Tab Switching ===
+                    function switchTab(tab) {
+                        var tabs = document.querySelectorAll('.model-tab');
+                        var contents = document.querySelectorAll('.tab-content');
+                        tabs.forEach(function(t) { t.classList.remove('active'); });
+                        contents.forEach(function(c) { c.classList.remove('active'); });
+
+                        if (tab === 'single') {
+                            tabs[0].classList.add('active');
+                            document.getElementById('tab-single').classList.add('active');
+                            document.getElementById('id_enable_comparison').value = '';
+                        } else {
+                            tabs[1].classList.add('active');
+                            document.getElementById('tab-compare').classList.add('active');
+                            document.getElementById('id_enable_comparison').value = 'on';
+                        }
+                    }
+
+                    // === Model Type Toggle (generic for both M1 and M2) ===
+                    function setupModelToggle(selectId, ebmId, moeId) {
+                        var sel = document.getElementById(selectId);
+                        sel.addEventListener('change', function() {
+                            document.getElementById(ebmId).style.display = this.value === 'ebm' ? 'block' : 'none';
+                            document.getElementById(moeId).style.display = this.value === 'moe' ? 'block' : 'none';
+                        });
+                        // Initialize
+                        document.getElementById(ebmId).style.display = sel.value === 'ebm' ? 'block' : 'none';
+                        document.getElementById(moeId).style.display = sel.value === 'moe' ? 'block' : 'none';
+                    }
+
+                    setupModelToggle('id_m1_type', 'm1-ebm-fields', 'm1-moe-fields');
+                    setupModelToggle('id_m2_type', 'm2-ebm-fields', 'm2-moe-fields');
+                    setupModelToggle('id_single_type', 'single-ebm-fields', 'single-moe-fields');
+
+                    // === Dynamic Expert Add/Remove ===
+                    function addExpert(inputName, listId) {
+                        var entry = document.createElement('div');
+                        entry.className = 'expert-entry';
+                        entry.innerHTML =
+                            '<input type="file" name="' + inputName + '" accept=".joblib" class="form-control">' +
+                            '<button type="button" class="btn-remove-expert" onclick="removeExpert(this, \'' + listId + '\')" title="移除">×</button>';
+                        document.getElementById(listId).appendChild(entry);
+                    }
+
+                    function removeExpert(btn, listId) {
+                        var list = document.getElementById(listId);
+                        if (list.children.length > 1) {
+                            btn.parentElement.remove();
+                        }
+                    }
+
+                    // === Progress Indicator ===
+                    document.getElementById('upload-form').addEventListener('submit', function() {
                         var btn = document.getElementById('submit-btn');
                         btn.disabled = true;
                         btn.innerHTML = '⏳ 分析中...';
@@ -920,7 +1317,6 @@
                                 document.getElementById('step-2'),
                                 document.getElementById('step-3')
                             ];
-                            // Activate steps sequentially
                             steps[0].classList.add('active');
                             setTimeout(function() {
                                 steps[0].classList.remove('active');
@@ -950,6 +1346,11 @@
                     <div>📊 <strong>Baseline：</strong>{{ uploaded_files.train_file }}</div>
                     {% else %}
                     <div style="color: #fbbf24;">⚠️ 未上傳 Baseline（使用第一個時間窗口）</div>
+                    {% endif %}
+                    {% if uploaded_files.comparison %}
+                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(99,102,241,0.1);">
+                        ⚔️ <strong>比較模型：</strong>{{ uploaded_files.comparison.type }}
+                    </div>
                     {% endif %}
                 </div>
                 {% endif %}
@@ -1067,6 +1468,79 @@
                         {% if llm_summary %}
                         <div class="report-subtitle">AI 分析摘要</div>
                         <div class="llm-summary-box">{{ llm_summary }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if moe_metrics %}
+                <!-- ==================== MoE Comparison Section ==================== -->
+                <div class="report-section" style="margin-top: 16px;">
+                    <div class="alerts-header-row">
+                        <div class="alerts-title">⚔️ 模型比較：EBM vs {{ comparison_info.type }}</div>
+                    </div>
+                    <div class="report-body" style="display: block;">
+
+                        {% if comparison_info %}
+                        <div style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">
+                            {% if comparison_info.type == 'MoE (Optuna)' %}
+                            <span style="color: #818cf8;">🧠 Meta-Learner:</span> {{ comparison_info.meta_learner }}
+                            · <span style="color: #818cf8;">Experts:</span> {{ comparison_info.experts|length }} 個
+                            {% else %}
+                            <span style="color: #818cf8;">📦 Model:</span> {{ comparison_info.model_file }}
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        {% if moe_metrics.error %}
+                        <div style="color: #fca5a5; font-size: 13px; padding: 12px; background: rgba(239,68,68,0.08); border-radius: 8px;">
+                            ❌ MoE 評估失敗：{{ moe_metrics.error }}
+                        </div>
+                        {% else %}
+                        <!-- Side-by-side comparison table -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                            <!-- EBM Column -->
+                            <div style="background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.2); border-radius: 10px; padding: 14px;">
+                                <div style="font-size: 12px; font-weight: 700; color: #a5b4fc; margin-bottom: 10px; text-align: center;">
+                                    EBM
+                                </div>
+                                {% if monthly_report %}
+                                <div style="font-size: 24px; font-weight: 700; color: #e2e8f0; text-align: center; margin-bottom: 8px;">
+                                    {{ monthly_report.safety_gates.Sensitivity.value }}
+                                </div>
+                                <div style="font-size: 11px; color: #94a3b8; text-align: center;">Sensitivity</div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; font-size: 12px; color: #cbd5e1;">
+                                    <div>AUPRC: <strong>{{ monthly_report.safety_gates.AUPRC.value }}</strong></div>
+                                    <div>AUROC: <strong>{{ monthly_report.safety_gates.AUROC.value }}</strong></div>
+                                    <div>FPR: <strong>{{ monthly_report.safety_gates.FPR.value }}</strong></div>
+                                    <div>F1: <strong>{{ monthly_report.additional.F1 }}</strong></div>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- MoE Column -->
+                            <div style="background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.2); border-radius: 10px; padding: 14px;">
+                                <div style="font-size: 12px; font-weight: 700; color: #fbbf24; margin-bottom: 10px; text-align: center;">
+                                    {{ comparison_info.type }}
+                                </div>
+                                <div style="font-size: 24px; font-weight: 700; color: #e2e8f0; text-align: center; margin-bottom: 8px;">
+                                    {{ moe_metrics.sensitivity }}
+                                </div>
+                                <div style="font-size: 11px; color: #94a3b8; text-align: center;">Sensitivity</div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; font-size: 12px; color: #cbd5e1;">
+                                    <div>AUPRC: <strong>{{ moe_metrics.auprc }}</strong></div>
+                                    <div>AUROC: <strong>{{ moe_metrics.auroc }}</strong></div>
+                                    <div>FPR: <strong>{{ moe_metrics.fpr }}</strong></div>
+                                    <div>F1: <strong>{{ moe_metrics.f1 }}</strong></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Comparison summary -->
+                        <div style="font-size: 12px; color: #94a3b8; text-align: center; padding: 8px; background: rgba(15,23,42,0.4); border-radius: 8px;">
+                            MoE 預測正確 {{ moe_metrics.correct }}/{{ moe_metrics.total }} 筆
+                            （準確率 {{ moe_metrics.accuracy }}%）
+                        </div>
                         {% endif %}
                     </div>
                 </div>

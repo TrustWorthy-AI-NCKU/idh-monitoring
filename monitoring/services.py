@@ -268,12 +268,15 @@ def compute_avg_psi(df_base, df_curr, features) -> float:
 # 5. Pipeline: Load, Process, Compute
 # ==========================================
 
-def load_and_process(data_path, model_path, feature_str, target_col, train_path=None):
+def load_and_process(data_path, model_path, feature_str, target_col,
+                     train_path=None, preloaded_model=None):
     """
     Full pipeline: load data, model, slice windows, compute metrics + drift.
     Returns a dict with all results needed for plotting.
-    
-    Bug fix: consistent return structure (always returns a dict).
+
+    Args:
+        preloaded_model: If provided, skip joblib.load(model_path) and use this directly.
+                         Useful for MoE models assembled from multiple files.
     """
     result = {
         'success': False,
@@ -286,22 +289,34 @@ def load_and_process(data_path, model_path, feature_str, target_col, train_path=
         'target_col': target_col,
     }
 
-    if not data_path or not model_path:
-        result['message'] = "請上傳資料檔與模型檔。"
+    if not data_path:
+        result['message'] = "請上傳資料檔。"
         return result
 
     try:
         # Load data
         df = pd.read_csv(data_path)
-        model = joblib.load(model_path)
+
+        # Load or use preloaded model
+        if preloaded_model is not None:
+            model = preloaded_model
+        elif model_path:
+            model = joblib.load(model_path)
+        else:
+            result['message'] = "未提供模型檔案。"
+            return result
 
         # Determine features
         model_feats = getattr(model, "feature_names_in_", getattr(model, "feature_names", []))
         user_feats = [x.strip() for x in feature_str.split(',') if x.strip()]
         final_feats = list(model_feats) if len(model_feats) > 0 else [f for f in user_feats if f in df.columns]
 
+        # If model has no stored feature names, use user-provided features
         if not final_feats:
-            result['message'] = "Error: 找不到有效特徵。"
+            final_feats = [f for f in user_feats if f in df.columns]
+
+        if not final_feats:
+            result['message'] = "Error: 找不到有效特徵，請確認 Features 欄位與資料欄位名稱一致。"
             return result
 
         if target_col not in df.columns and 'Nadir90_100' in df.columns:
@@ -340,6 +355,7 @@ def load_and_process(data_path, model_path, feature_str, target_col, train_path=
     except Exception as e:
         result['message'] = f"系統錯誤：{str(e)}"
         return result
+
 
 
 # ==========================================
