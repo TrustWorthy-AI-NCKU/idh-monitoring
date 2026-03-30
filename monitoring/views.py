@@ -159,22 +159,44 @@ def dashboard_view(request):
             # COMPARISON MODE
             # ======================================================
             else:
-                # Model 1 (required: model_file)
-                model_file = request.FILES.get('model_file')
-                if not model_file:
-                    messages.error(request, '比較模式：請上傳 Model 1 (.joblib) 檔案。')
-                    return redirect('monitoring:dashboard')
+                m1_type = request.POST.get('m1_type', 'ebm')
 
-                model_path = _save_uploaded_file(model_file, temp_dir)
-                result = load_and_process(
-                    data_path=data_path,
-                    model_path=model_path,
-                    feature_str=features,
-                    target_col=target_col,
-                    train_path=train_path,
-                )
+                # --- Model 1 ---
+                if m1_type == 'moe':
+                    m1_meta = request.FILES.get('m1_meta_learner')
+                    m1_experts = [ef for ef in request.FILES.getlist('m1_expert_files') if ef.size > 0]
+                    if not m1_meta or len(m1_experts) < 2:
+                        messages.error(request, 'M1 MoE：請上傳 Gating Network 和至少 2 個 Expert。')
+                        return redirect('monitoring:dashboard')
+                    m1_meta_path = _save_uploaded_file(m1_meta, temp_dir)
+                    m1_expert_paths = {os.path.splitext(ef.name)[0]: _save_uploaded_file(ef, temp_dir) for ef in m1_experts}
+                    try:
+                        from .moe_service import MoESklearnWrapper
+                        m1_moe = MoEModel(m1_expert_paths, m1_meta_path)
+                        m1_model = MoESklearnWrapper(m1_moe)
+                    except Exception as e:
+                        messages.error(request, f'M1 MoE 載入失敗: {str(e)}')
+                        return redirect('monitoring:dashboard')
+                    result = load_and_process(
+                        data_path=data_path, model_path=None,
+                        feature_str=features, target_col=target_col,
+                        train_path=train_path, preloaded_model=m1_model,
+                    )
+                else:
+                    # M1 EBM
+                    model_file = request.FILES.get('model_file')
+                    if not model_file:
+                        messages.error(request, '比較模式：請上傳 Model 1 (.joblib) 檔案。')
+                        return redirect('monitoring:dashboard')
+                    model_path = _save_uploaded_file(model_file, temp_dir)
+                    result = load_and_process(
+                        data_path=data_path, model_path=model_path,
+                        feature_str=features, target_col=target_col,
+                        train_path=train_path,
+                    )
 
                 if not result['success']:
+                    logger.error(f"[dashboard] compare M1 failed: {result['message']}")
                     messages.error(request, result['message'])
                     return redirect('monitoring:dashboard')
 
@@ -189,24 +211,22 @@ def dashboard_view(request):
                     'alert_mode': request.POST.get('alert_mode', 'strict'),
                 }
 
-                # Model 2 comparison
-                cmp_type = request.POST.get('comparison_model_type', 'ebm')
-                if cmp_type == 'moe':
-                    meta_file = request.FILES.get('moe_meta_learner')
-                    expert_files = request.FILES.getlist('moe_expert_files')
-                    expert_files = [ef for ef in expert_files if ef.size > 0]
+                # --- Model 2 (comparison) ---
+                m2_type = request.POST.get('m2_type', 'ebm')
+                if m2_type == 'moe':
+                    meta_file = request.FILES.get('m2_meta_learner')
+                    expert_files = [ef for ef in request.FILES.getlist('m2_expert_files') if ef.size > 0]
                     if meta_file and expert_files:
                         meta_path = _save_uploaded_file(meta_file, temp_dir)
                         expert_paths = {}
                         expert_names = []
                         for ef in expert_files:
-                            epath = _save_uploaded_file(ef, temp_dir)
                             name = os.path.splitext(ef.name)[0]
-                            expert_paths[name] = epath
+                            expert_paths[name] = _save_uploaded_file(ef, temp_dir)
                             expert_names.append(ef.name)
                         try:
-                            moe = MoEModel(expert_paths, meta_path)
-                            cache_data['moe_model'] = moe
+                            moe2 = MoEModel(expert_paths, meta_path)
+                            cache_data['moe_model'] = moe2
                             cache_data['comparison_type'] = 'moe'
                             cache_data['comparison_info'] = {
                                 'type': 'MoE (Optuna)',
@@ -214,11 +234,12 @@ def dashboard_view(request):
                                 'experts': expert_names,
                             }
                         except Exception as e:
-                            messages.warning(request, f'MoE 模型載入失敗: {str(e)}')
+                            messages.warning(request, f'M2 MoE 載入失敗: {str(e)}')
                     else:
-                        messages.warning(request, '請上傳 Meta-Learner 和至少一個 Expert。')
-                elif cmp_type == 'ebm':
-                    cmp_model_file = request.FILES.get('comparison_ebm_model')
+                        messages.warning(request, 'M2 MoE：請上傳 Meta-Learner 和至少一個 Expert。')
+                else:
+                    # M2 EBM
+                    cmp_model_file = request.FILES.get('m2_ebm_model')
                     if cmp_model_file:
                         import joblib
                         cmp_path = _save_uploaded_file(cmp_model_file, temp_dir)
@@ -231,14 +252,15 @@ def dashboard_view(request):
                                 'model_file': cmp_model_file.name,
                             }
                         except Exception as e:
-                            messages.warning(request, f'比較 EBM 模型載入失敗: {str(e)}')
+                            messages.warning(request, f'M2 EBM 載入失敗: {str(e)}')
                     else:
-                        messages.warning(request, '請上傳比較用的 EBM 模型。')
+                        messages.warning(request, '請上傳 Model 2 EBM (.joblib)。')
 
                 cache.set(CACHE_KEY, cache_data, CACHE_TIMEOUT)
+                m1_name = (request.FILES.get('model_file') or request.FILES.get('m1_meta_learner') or data_file).name
                 request.session['uploaded_files'] = {
                     'data_file': data_file.name,
-                    'model_file': model_file.name,
+                    'model_file': m1_name,
                     'train_file': train_file.name if train_file else None,
                     'features': features,
                     'target_col': target_col,
@@ -247,6 +269,7 @@ def dashboard_view(request):
                 if cache_data.get('comparison_info'):
                     request.session['uploaded_files']['comparison'] = cache_data['comparison_info']
                 messages.success(request, result['message'])
+
 
         except Exception as e:
             logger.exception(f"[dashboard] Unhandled error during POST: {e}")

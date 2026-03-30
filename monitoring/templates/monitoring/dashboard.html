@@ -1026,7 +1026,7 @@
                     <button type="button" class="model-tab" onclick="switchTab('compare')">比較模型</button>
                 </div>
 
-                <form method="post" enctype="multipart/form-data" id="upload-form">
+                <form method="post" enctype="multipart/form-data" id="upload-form" novalidate>
                     {% csrf_token %}
 
                     <!-- Hidden field: enable_comparison -->
