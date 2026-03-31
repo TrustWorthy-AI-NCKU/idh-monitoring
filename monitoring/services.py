@@ -88,6 +88,15 @@ def sliding_windows_exact(df, window_size_days=90, stride_days=30):
 
 def get_metrics(model, X, y):
     """Compute AUROC, AUPRC, F1 for a given model and data."""
+    # Handle NaN in target
+    if hasattr(y, 'isna'):
+        valid_mask = ~y.isna()
+        y = y[valid_mask]
+        if hasattr(X, 'loc'):
+            X = X.loc[valid_mask]
+        else:
+            X = X[valid_mask.values]
+
     if len(y) < 2 or len(np.unique(y)) < 2:
         return None, "樣本數不足或標籤單一"
 
@@ -319,8 +328,19 @@ def load_and_process(data_path, model_path, feature_str, target_col,
             result['message'] = "Error: 找不到有效特徵，請確認 Features 欄位與資料欄位名稱一致。"
             return result
 
-        if target_col not in df.columns and 'Nadir90_100' in df.columns:
-            target_col = 'Nadir90_100'
+        # Resolve target column name (handle Nadir90/100 vs Nadir90_100 mismatch)
+        target_aliases = [target_col, 'Nadir90_100', 'Nadir90/100', 'Nadir90/100.y']
+        resolved_target = None
+        for alias in target_aliases:
+            if alias in df.columns:
+                resolved_target = alias
+                break
+        if resolved_target is None:
+            result['message'] = f"Error: 找不到目標欄位 '{target_col}'，資料中可用的欄位: {[c for c in df.columns if 'nadir' in c.lower() or 'target' in c.lower()]}"
+            return result
+        # Standardize: rename to user-specified target_col so all downstream code uses one name
+        if resolved_target != target_col:
+            df = df.rename(columns={resolved_target: target_col})
 
         # Preprocess and slice
         df_clean = preprocess_data(df)
@@ -613,7 +633,14 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
             X_infer = w_df if getattr(model, 'is_moe', False) else w_df[final_feats]
             y = w_df[target_col]
 
-            mets, _ = get_metrics(model, X_infer, y)
+            # Drop NaN targets
+            valid_mask = ~y.isna()
+            if valid_mask.sum() < 2:
+                continue
+            y_clean = y[valid_mask]
+            X_clean = X_infer.loc[valid_mask] if hasattr(X_infer, 'loc') else X_infer[valid_mask.values]
+
+            mets, _ = get_metrics(model, X_clean, y_clean)
             avg_js, _ = compute_features_drift(baseline, w_df, final_feats)
             if mets:
                 # Existing metrics
@@ -622,12 +649,12 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
 
                 # --- New metrics (computed but not plotted) ---
                 try:
-                    y_prob = model.predict_proba(X_infer)[:, 1]
-                    y_prob_all = model.predict_proba(X_infer)
+                    y_prob = model.predict_proba(X_clean)[:, 1]
+                    y_prob_all = model.predict_proba(X_clean)
 
                     mets['PSI'] = compute_avg_psi(baseline, w_df, final_feats)
-                    mets['ECE'] = calculate_ece(y, y_prob)
-                    mets['Brier'] = calculate_brier(y, y_prob)
+                    mets['ECE'] = calculate_ece(y_clean, y_prob)
+                    mets['Brier'] = calculate_brier(y_clean, y_prob)
 
                     ent = calculate_average_entropy(y_prob_all)
                     mets['Entropy'] = ent
@@ -1015,8 +1042,16 @@ def generate_monthly_report(windows, baseline_data, dates, model,
         try:
             X_infer = w_df if getattr(model, 'is_moe', False) else w_df[final_feats]
             y = w_df[target_col]
-            y_pred = model.predict(X_infer).astype(float)
-            y_prob = model.predict_proba(X_infer)[:, 1]
+
+            # Drop NaN targets
+            valid_mask = ~y.isna()
+            if valid_mask.sum() < 2:
+                continue
+            y = y[valid_mask]
+            X_valid = X_infer.loc[valid_mask] if hasattr(X_infer, 'loc') else X_infer[valid_mask.values]
+
+            y_pred = model.predict(X_valid).astype(float)
+            y_prob = model.predict_proba(X_valid)[:, 1]
 
             all_y_true.extend(y.tolist())
             all_y_pred.extend(y_pred.tolist())
@@ -1031,6 +1066,10 @@ def generate_monthly_report(windows, baseline_data, dates, model,
     y_true = np.array(all_y_true)
     y_pred = np.array(all_y_pred)
     y_prob = np.array(all_y_prob)
+
+    # Final NaN cleanup
+    valid = ~(np.isnan(y_true) | np.isnan(y_pred) | np.isnan(y_prob))
+    y_true, y_pred, y_prob = y_true[valid], y_pred[valid], y_prob[valid]
 
     total = len(y_true)
     positive = int(y_true.sum())
