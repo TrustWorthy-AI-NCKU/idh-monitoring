@@ -11,7 +11,7 @@ from django.core.cache import cache
 import plotly.utils
 
 from .forms import MonitoringForm
-from .services import load_and_process, build_dashboard_figure, generate_alerts, generate_monthly_report
+from .services import load_and_process, build_dashboard_figure, build_comparison_figure, generate_alerts, generate_monthly_report
 from .llm_service import generate_llm_summary
 from .moe_service import MoEModel
 
@@ -225,8 +225,10 @@ def dashboard_view(request):
                             expert_paths[name] = _save_uploaded_file(ef, temp_dir)
                             expert_names.append(ef.name)
                         try:
+                            from .moe_service import MoESklearnWrapper as MoEWrap2
                             moe2 = MoEModel(expert_paths, meta_path)
                             cache_data['moe_model'] = moe2
+                            cache_data['comparison_model_wrapped'] = MoEWrap2(moe2)
                             cache_data['comparison_type'] = 'moe'
                             cache_data['comparison_info'] = {
                                 'type': 'MoE (Optuna)',
@@ -301,10 +303,12 @@ def dashboard_view(request):
     llm_summary = None
     moe_metrics = None
     comparison_info = None
+    comparison_figure_json = None
 
     if has_data:
         cached_data = cache.get(CACHE_KEY)
         if cached_data:
+            # --- Primary Model Figure ---
             try:
                 fig, msg = build_dashboard_figure(
                     windows=cached_data['windows'],
@@ -352,26 +356,28 @@ def dashboard_view(request):
             except Exception as e:
                 llm_summary = f"報告生成失敗（{str(e)}）"
 
-            # --- MoE comparison metrics ---
+            # --- Comparison Model Figure ---
             comparison_info = cached_data.get('comparison_info')
-            if cached_data.get('comparison_type') == 'moe':
-                moe_model = cached_data.get('moe_model')
-                if moe_model:
-                    try:
-                        import pandas as pd
-                        import numpy as np
-                        # Aggregate all window data for MoE evaluation
-                        all_dfs = []
-                        for w_df in cached_data['windows']:
-                            all_dfs.append(w_df)
-                        combined = pd.concat(all_dfs, ignore_index=True)
-
-                        X_moe = combined.copy()
-                        y_moe = combined[cached_data['target_col']].copy()
-
-                        moe_metrics, _, _ = moe_model.evaluate(X_moe, y_moe)
-                    except Exception as e:
-                        moe_metrics = {'error': str(e)}
+            m2_model = cached_data.get('comparison_model_wrapped') or cached_data.get('comparison_model')
+            if m2_model:
+                try:
+                    m1_name = uploaded_files.get('model_file', 'Model 1')
+                    m2_name = comparison_info.get('type', 'Model 2') if comparison_info else 'Model 2'
+                    comp_fig, comp_msg = build_comparison_figure(
+                        windows=cached_data['windows'],
+                        dates=cached_data['dates'],
+                        model_1=cached_data['model'],
+                        model_2=m2_model,
+                        final_feats=cached_data['features'],
+                        target_col=cached_data['target_col'],
+                        baseline=cached_data['baseline'],
+                        model_1_name=m1_name,
+                        model_2_name=m2_name,
+                    )
+                    comparison_figure_json = json.dumps(comp_fig, cls=plotly.utils.PlotlyJSONEncoder)
+                except Exception as e:
+                    logger.error(f"[dashboard] comparison figure failed: {e}")
+                    moe_metrics = {'error': str(e)}
 
     context = {
         'form': form,
@@ -385,5 +391,6 @@ def dashboard_view(request):
         'llm_summary': llm_summary,
         'moe_metrics': moe_metrics,
         'comparison_info': comparison_info,
+        'comparison_figure_json': comparison_figure_json,
     }
     return render(request, 'monitoring/dashboard.html', context)

@@ -503,6 +503,167 @@ def build_dashboard_figure(windows, baseline_data, dates, model, final_feats, ta
 
 
 # ==========================================
+# 6b. Helper: Compute per-window metrics for a model
+# ==========================================
+
+def compute_model_windows_metrics(windows, dates, model, final_feats, target_col, baseline=None):
+    """
+    Compute AUROC, AUPRC, F1, JS divergence for each time window using the given model.
+    Returns a DataFrame with columns: Date, AUROC, AUPRC, F1 score, JS divergence.
+    """
+    if baseline is None and windows:
+        baseline = windows[0]
+
+    res = {'Date': [], 'AUROC': [], 'AUPRC': [], 'F1 score': [], 'JS divergence': []}
+
+    for i, w_df in enumerate(windows):
+        try:
+            X_infer = w_df if getattr(model, 'is_moe', False) else w_df[final_feats]
+            mets, _ = get_metrics(model, X_infer, w_df[target_col])
+            avg_js, _ = compute_features_drift(baseline, w_df, final_feats)
+            if mets:
+                res['Date'].append(dates[i])
+                res['AUROC'].append(mets['AUROC'])
+                res['AUPRC'].append(mets['AUPRC'])
+                res['F1 score'].append(mets['F1 score'])
+                res['JS divergence'].append(avg_js)
+        except Exception:
+            continue
+
+    return pd.DataFrame(res) if res['Date'] else pd.DataFrame()
+
+
+# ==========================================
+# 6c. Comparison Figure: Dual-Model Overlay
+# ==========================================
+
+def build_comparison_figure(windows, dates, model_1, model_2, final_feats, target_col,
+                            baseline=None, model_1_name='Model 1', model_2_name='Model 2'):
+    """
+    Build a comparison Plotly figure: two models' AUPRC/AUROC/F1 overlaid on the same chart,
+    plus a heatmap of feature drift from the primary model.
+    """
+    if not windows:
+        return go.Figure(), "無可用的時間窗口資料。"
+
+    # Compute per-window metrics for both models
+    df_m1 = compute_model_windows_metrics(windows, dates, model_1, final_feats, target_col, baseline)
+    df_m2 = compute_model_windows_metrics(windows, dates, model_2, final_feats, target_col, baseline)
+
+    if df_m1.empty and df_m2.empty:
+        return go.Figure(), "兩個模型都無法計算有效指標。"
+
+    # Build subplot: 2 rows (performance + heatmap)
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        row_heights=[0.5, 0.5],
+        specs=[[{"secondary_y": True}], [{"secondary_y": False}]],
+    )
+
+    # Color scheme
+    m1_colors = {'AUPRC': '#00CC96', 'AUROC': '#636EFA', 'F1 score': '#EF553B'}
+    m2_colors = {'AUPRC': '#FF6692', 'AUROC': '#FFA15A', 'F1 score': '#B6E880'}
+
+    # Model 1 traces (solid lines)
+    if not df_m1.empty:
+        for metric in ['AUPRC', 'AUROC', 'F1 score']:
+            if metric in df_m1.columns:
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_m1['Date'], y=df_m1[metric],
+                        name=f'{model_1_name} {metric}',
+                        mode='lines+markers',
+                        marker=dict(color=m1_colors.get(metric, 'grey'), size=6),
+                        line=dict(width=2, dash='solid'),
+                        legendgroup=model_1_name,
+                    ),
+                    row=1, col=1, secondary_y=False
+                )
+
+        # JS divergence on secondary axis
+        if 'JS divergence' in df_m1.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df_m1['Date'], y=df_m1['JS divergence'],
+                    name=f'{model_1_name} JS Div',
+                    mode='lines',
+                    line=dict(width=1.5, dash='dot', color='#AB63FA'),
+                    legendgroup=model_1_name,
+                ),
+                row=1, col=1, secondary_y=True
+            )
+
+    # Model 2 traces (dashed lines)
+    if not df_m2.empty:
+        for metric in ['AUPRC', 'AUROC', 'F1 score']:
+            if metric in df_m2.columns:
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_m2['Date'], y=df_m2[metric],
+                        name=f'{model_2_name} {metric}',
+                        mode='lines+markers',
+                        marker=dict(color=m2_colors.get(metric, 'grey'), size=6, symbol='diamond'),
+                        line=dict(width=2, dash='dash'),
+                        legendgroup=model_2_name,
+                    ),
+                    row=1, col=1, secondary_y=False
+                )
+
+    # Heatmap from primary model's data
+    if baseline is None and windows:
+        baseline = windows[0]
+    heatmap_raw = []
+    for w_df in windows:
+        try:
+            _, scores = compute_features_drift(baseline, w_df, final_feats)
+            heatmap_raw.append(scores)
+        except Exception:
+            heatmap_raw.append({f: 0.0 for f in final_feats})
+
+    z_data = []
+    for feat in final_feats:
+        z_data.append([rec.get(feat, 0.0) for rec in heatmap_raw])
+
+    fig.add_trace(
+        go.Heatmap(
+            z=z_data,
+            x=[d for d in dates[:len(heatmap_raw)]],
+            y=final_feats,
+            colorscale='RdBu_r',
+            zmin=0, zmax=1.0,
+            colorbar=dict(title="JS Div", y=0.25, len=0.5),
+            showlegend=False,
+        ),
+        row=2, col=1
+    )
+
+    # Layout
+    fig.update_layout(
+        title=f"Model Comparison: {model_1_name} vs {model_2_name}",
+        height=850,
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        paper_bgcolor='#fafafa',
+        plot_bgcolor='#ffffff',
+    )
+
+    fig.update_yaxes(title_text="Performance", secondary_y=False, range=[0, 1.05], row=1, col=1)
+    fig.update_yaxes(title_text="Avg Drift (JS)", secondary_y=True, range=[0, 1.0], showgrid=False, row=1, col=1)
+    fig.update_yaxes(title="Features", automargin=True, row=2, col=1)
+    fig.update_xaxes(
+        title="Time",
+        rangeslider=dict(visible=True, thickness=0.05),
+        type="date",
+        row=2, col=1
+    )
+    fig.update_xaxes(showticklabels=False, row=1, col=1)
+
+    return fig, "比較圖表產生成功。"
+
+
+# ==========================================
 # 7. Alert Generation (Interpretability)
 # ==========================================
 

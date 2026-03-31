@@ -73,6 +73,72 @@
         .sidebar {
             width: 360px;
             flex-shrink: 0;
+            transition: width 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+            overflow: hidden;
+        }
+
+        .sidebar.collapsed {
+            width: 0;
+            padding: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .sidebar-toggle-btn {
+            position: fixed;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 100;
+            background: rgba(99, 102, 241, 0.3);
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            color: #a5b4fc;
+            border-radius: 0 8px 8px 0;
+            padding: 12px 6px;
+            cursor: pointer;
+            font-size: 14px;
+            backdrop-filter: blur(8px);
+            transition: all 0.2s ease;
+            display: none;
+        }
+
+        .sidebar-toggle-btn:hover {
+            background: rgba(99, 102, 241, 0.5);
+        }
+
+        .sidebar-toggle-btn.visible {
+            display: block;
+        }
+
+        /* Model Info Bar */
+        .model-info-bar {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            border-radius: 10px;
+            padding: 12px 20px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            font-size: 12px;
+            color: #94a3b8;
+            flex-wrap: wrap;
+        }
+
+        .model-info-bar .info-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .model-info-bar .info-item strong {
+            color: #cbd5e1;
+        }
+
+        .model-info-bar .info-divider {
+            width: 1px;
+            height: 16px;
+            background: rgba(99, 102, 241, 0.2);
         }
 
         .card {
@@ -94,6 +160,24 @@
             display: flex;
             align-items: center;
             gap: 8px;
+        }
+
+        .card-title .collapse-toggle {
+            margin-left: auto;
+            background: none;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: #818cf8;
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .card-title .collapse-toggle:hover {
+            background: rgba(99, 102, 241, 0.15);
+            border-color: #6366f1;
         }
 
         .card-title::before {
@@ -1003,8 +1087,13 @@
 
     <!-- Main Content -->
     <div class="main-container">
+        <!-- Sidebar Toggle Button (visible when sidebar is collapsed) -->
+        <button class="sidebar-toggle-btn" id="sidebar-expand-btn" onclick="toggleSidebar()">
+            ▶ 上傳
+        </button>
+
         <!-- Sidebar: Upload Form -->
-        <div class="sidebar">
+        <div class="sidebar" id="sidebar">
             <!-- Messages -->
             {% if messages %}
             <ul class="messages">
@@ -1018,7 +1107,10 @@
             {% endif %}
 
             <div class="card">
-                <div class="card-title">資料上傳</div>
+                <div class="card-title">
+                    資料上傳
+                    <button type="button" class="collapse-toggle" onclick="toggleSidebar()">◀ 收合</button>
+                </div>
 
                 <!-- Model Tabs -->
                 <div class="model-tabs">
@@ -1334,7 +1426,7 @@
             </div>
 
             <!-- Status Card -->
-            <div class="card">
+            <div class="card" id="status-card">
                 <div class="card-title">系統狀態</div>
                 {% if has_data %}
                 <span class="status-badge status-ready">🟢 資料已載入</span>
@@ -1392,6 +1484,29 @@
 
         <!-- Dashboard Area -->
         <div class="dashboard-area">
+            <!-- Model Info Bar (shown when data loaded) -->
+            {% if has_data and uploaded_files %}
+            <div class="model-info-bar">
+                <div class="info-item">📄 <strong>Dataset:</strong> {{ uploaded_files.data_file }}</div>
+                <div class="info-divider"></div>
+                <div class="info-item">🤖 <strong>Model:</strong> {{ uploaded_files.model_file }}
+                    {% if uploaded_files.model_type %}<span style="color: #818cf8; margin-left: 4px;">({{ uploaded_files.model_type|upper }})</span>{% endif %}
+                </div>
+                {% if uploaded_files.train_file %}
+                <div class="info-divider"></div>
+                <div class="info-item">📊 <strong>Baseline:</strong> {{ uploaded_files.train_file }}</div>
+                {% endif %}
+                {% if uploaded_files.comparison %}
+                <div class="info-divider"></div>
+                <div class="info-item">⚔️ <strong>比較:</strong> {{ uploaded_files.comparison.type }}</div>
+                {% endif %}
+                <div class="info-divider"></div>
+                <div class="info-item">
+                    <span class="status-badge status-ready" style="font-size: 11px; padding: 2px 8px;">🟢 已載入</span>
+                </div>
+            </div>
+            {% endif %}
+
             <div class="dashboard-card">
                 {% if figure_error %}
                 <div class="error-banner">
@@ -1478,78 +1593,38 @@
                 </div>
                 {% endif %}
 
-                {% if moe_metrics %}
-                <!-- ==================== MoE Comparison Section ==================== -->
+                {% if comparison_figure_json %}
+                <!-- ==================== Model Comparison Chart ==================== -->
                 <div class="report-section" style="margin-top: 16px;">
                     <div class="alerts-header-row">
-                        <div class="alerts-title">⚔️ 模型比較：EBM vs {{ comparison_info.type }}</div>
+                        <div class="alerts-header">⚔️ 模型比較圖表</div>
+                        <button class="collapse-btn" id="compare-collapse-btn" onclick="toggleCompareSection()">
+                            收合 ▲
+                        </button>
                     </div>
-                    <div class="report-body" style="display: block;">
-
+                    <div id="compare-content">
                         {% if comparison_info %}
                         <div style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">
                             {% if comparison_info.type == 'MoE (Optuna)' %}
                             <span style="color: #818cf8;">🧠 Meta-Learner:</span> {{ comparison_info.meta_learner }}
                             · <span style="color: #818cf8;">Experts:</span> {{ comparison_info.experts|length }} 個
                             {% else %}
-                            <span style="color: #818cf8;">📦 Model:</span> {{ comparison_info.model_file }}
+                            <span style="color: #818cf8;">📦 Model 2:</span> {{ comparison_info.model_file }}
                             {% endif %}
+                            <br>
+                            <span style="color: #64748b; font-size: 11px;">兩個模型使用相同的 90 天時間窗格進行比較分析，實線 = Model 1、虛線 = Model 2</span>
                         </div>
                         {% endif %}
 
-                        {% if moe_metrics.error %}
-                        <div style="color: #fca5a5; font-size: 13px; padding: 12px; background: rgba(239,68,68,0.08); border-radius: 8px;">
-                            ❌ MoE 評估失敗：{{ moe_metrics.error }}
-                        </div>
-                        {% else %}
-                        <!-- Side-by-side comparison table -->
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
-                            <!-- EBM Column -->
-                            <div style="background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.2); border-radius: 10px; padding: 14px;">
-                                <div style="font-size: 12px; font-weight: 700; color: #a5b4fc; margin-bottom: 10px; text-align: center;">
-                                    EBM
-                                </div>
-                                {% if monthly_report %}
-                                <div style="font-size: 24px; font-weight: 700; color: #e2e8f0; text-align: center; margin-bottom: 8px;">
-                                    {{ monthly_report.safety_gates.Sensitivity.value }}
-                                </div>
-                                <div style="font-size: 11px; color: #94a3b8; text-align: center;">Sensitivity</div>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; font-size: 12px; color: #cbd5e1;">
-                                    <div>AUPRC: <strong>{{ monthly_report.safety_gates.AUPRC.value }}</strong></div>
-                                    <div>AUROC: <strong>{{ monthly_report.safety_gates.AUROC.value }}</strong></div>
-                                    <div>FPR: <strong>{{ monthly_report.safety_gates.FPR.value }}</strong></div>
-                                    <div>F1: <strong>{{ monthly_report.additional.F1 }}</strong></div>
-                                </div>
-                                {% endif %}
-                            </div>
-
-                            <!-- MoE Column -->
-                            <div style="background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.2); border-radius: 10px; padding: 14px;">
-                                <div style="font-size: 12px; font-weight: 700; color: #fbbf24; margin-bottom: 10px; text-align: center;">
-                                    {{ comparison_info.type }}
-                                </div>
-                                <div style="font-size: 24px; font-weight: 700; color: #e2e8f0; text-align: center; margin-bottom: 8px;">
-                                    {{ moe_metrics.sensitivity }}
-                                </div>
-                                <div style="font-size: 11px; color: #94a3b8; text-align: center;">Sensitivity</div>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; font-size: 12px; color: #cbd5e1;">
-                                    <div>AUPRC: <strong>{{ moe_metrics.auprc }}</strong></div>
-                                    <div>AUROC: <strong>{{ moe_metrics.auroc }}</strong></div>
-                                    <div>FPR: <strong>{{ moe_metrics.fpr }}</strong></div>
-                                    <div>F1: <strong>{{ moe_metrics.f1 }}</strong></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Comparison summary -->
-                        <div style="font-size: 12px; color: #94a3b8; text-align: center; padding: 8px; background: rgba(15,23,42,0.4); border-radius: 8px;">
-                            MoE 預測正確 {{ moe_metrics.correct }}/{{ moe_metrics.total }} 筆
-                            （準確率 {{ moe_metrics.accuracy }}%）
-                        </div>
-                        {% endif %}
+                        <div id="comparison-chart" style="width: 100%;"></div>
+                        <script>
+                            var compData = {{ comparison_figure_json|safe }};
+                            Plotly.newPlot('comparison-chart', compData.data, compData.layout, {responsive: true});
+                        </script>
                     </div>
                 </div>
                 {% endif %}
+
 
                 <!-- Metrics filter -->
                 <div class="metrics-bar">
@@ -1715,6 +1790,20 @@
                             btn.textContent = '展開 ▼';
                         }
                     }
+
+                    // === Comparison Chart Section Toggle ===
+                    function toggleCompareSection() {
+                        var content = document.getElementById('compare-content');
+                        var btn = document.getElementById('compare-collapse-btn');
+                        if (!content) return;
+                        if (content.style.display === 'none') {
+                            content.style.display = 'block';
+                            btn.textContent = '收合 ▲';
+                        } else {
+                            content.style.display = 'none';
+                            btn.textContent = '展開 ▼';
+                        }
+                    }
                 </script>
 
                 {% else %}
@@ -1727,5 +1816,27 @@
             </div>
         </div>
     </div>
+
+    <script>
+        // === Sidebar Toggle ===
+        function toggleSidebar() {
+            var sidebar = document.getElementById('sidebar');
+            var expandBtn = document.getElementById('sidebar-expand-btn');
+            if (sidebar.classList.contains('collapsed')) {
+                sidebar.classList.remove('collapsed');
+                expandBtn.classList.remove('visible');
+            } else {
+                sidebar.classList.add('collapsed');
+                expandBtn.classList.add('visible');
+            }
+        }
+
+        // Auto-collapse sidebar when data is loaded on page load
+        {% if has_data %}
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleSidebar();
+        });
+        {% endif %}
+    </script>
 </body>
 </html>
