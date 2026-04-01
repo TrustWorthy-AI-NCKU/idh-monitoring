@@ -11,9 +11,13 @@ from django.core.cache import cache
 import plotly.utils
 
 from .forms import MonitoringForm
-from .services import load_and_process, build_dashboard_figure, build_comparison_figure, generate_alerts, generate_monthly_report
+from .services import (
+    load_and_process, build_dashboard_figure, build_comparison_figure,
+    generate_alerts, generate_monthly_report,
+    compute_model_windows_metrics, compute_comparison_summary, compute_longevity_metrics,
+)
 from .llm_service import generate_llm_summary
-from .moe_service import MoEModel
+from .moe_service import MoEModel, create_moe_model
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +35,25 @@ def _save_uploaded_file(uploaded_file, temp_dir):
     return path
 
 
+def reset_view(request):
+    """Clear all cached data and session, redirect to fresh dashboard."""
+    cache.delete(CACHE_KEY)
+    if 'uploaded_files' in request.session:
+        del request.session['uploaded_files']
+    messages.success(request, '已清除所有資料與分析結果。')
+    return redirect('monitoring:dashboard')
+
+
 def dashboard_view(request):
     """Main dashboard view - handles file upload and renders the dashboard."""
     form = MonitoringForm()
     has_data = cache.get(CACHE_KEY) is not None
 
     if request.method == 'POST':
+        # Clear stale cache before processing new upload
+        cache.delete(CACHE_KEY)
+        has_data = False
+
         # Determine which tab and model type was submitted
         enable_comparison = request.POST.get('enable_comparison') == 'on'
         single_model_type = request.POST.get('single_model_type', 'ebm')  # 'ebm' or 'moe'
@@ -52,6 +69,22 @@ def dashboard_view(request):
             trend_window = int(trend_window_raw)
         except (ValueError, TypeError):
             trend_window = 5
+
+        # Advanced window settings
+        try:
+            window_size_days = int(request.POST.get('window_size_days', '90'))
+            window_size_days = max(7, window_size_days)  # minimum 7 days
+        except (ValueError, TypeError):
+            window_size_days = 90
+        try:
+            stride_days = int(request.POST.get('stride_days', '30'))
+            stride_days = max(7, stride_days)  # minimum 7 days (one week)
+        except (ValueError, TypeError):
+            stride_days = 30
+        try:
+            auprc_threshold = float(request.POST.get('auprc_threshold', '0.40'))
+        except (ValueError, TypeError):
+            auprc_threshold = 0.40
 
         if not data_file:
             messages.error(request, '請上傳 Dataset (.csv) 檔案。')
@@ -74,40 +107,55 @@ def dashboard_view(request):
 
                 if single_model_type == 'moe':
                     # --- Single MoE ---
-                    meta_file = request.FILES.get('single_meta_learner')
-                    expert_files = request.FILES.getlist('single_expert_files')
-                    expert_files = [ef for ef in expert_files if ef.size > 0]
+                    moe_subtype = request.POST.get('single_moe_subtype', 'optuna')
 
-                    if not meta_file:
-                        messages.error(request, 'MoE 模式：請上傳 Gating Network (.joblib)。')
-                        return redirect('monitoring:dashboard')
-                    if len(expert_files) < 2:
-                        messages.error(request, 'MoE 模式：請上傳至少 2 個 Expert 模型。')
-                        return redirect('monitoring:dashboard')
+                    if moe_subtype == 'custom':
+                        # Custom: single pre-packaged .joblib
+                        custom_file = request.FILES.get('single_custom_model')
+                        if not custom_file:
+                            messages.error(request, 'Custom MoE：請上傳預打包的模型 (.joblib)。')
+                            return redirect('monitoring:dashboard')
+                        custom_path = _save_uploaded_file(custom_file, temp_dir)
+                        try:
+                            wrapped_model = create_moe_model({}, custom_path, moe_subtype='custom')
+                        except Exception as e:
+                            messages.error(request, f'Custom MoE 載入失敗: {str(e)}')
+                            return redirect('monitoring:dashboard')
+                    else:
+                        # Optuna or Standard: need router/gating + experts
+                        meta_file = request.FILES.get('single_meta_learner')
+                        expert_files = request.FILES.getlist('single_expert_files')
+                        expert_files = [ef for ef in expert_files if ef.size > 0]
 
-                    meta_path = _save_uploaded_file(meta_file, temp_dir)
-                    expert_paths = {}
-                    for ef in expert_files:
-                        name = os.path.splitext(ef.name)[0]
-                        expert_paths[name] = _save_uploaded_file(ef, temp_dir)
+                        if not meta_file:
+                            label = 'Gating Network' if moe_subtype == 'optuna' else 'Router'
+                            messages.error(request, f'MoE 模式：請上傳 {label} (.joblib)。')
+                            return redirect('monitoring:dashboard')
+                        if len(expert_files) < 2:
+                            messages.error(request, 'MoE 模式：請上傳至少 2 個 Expert 模型。')
+                            return redirect('monitoring:dashboard')
 
-                    try:
-                        moe = MoEModel(expert_paths, meta_path)
-                    except Exception as e:
-                        messages.error(request, f'MoE 模型載入失敗: {str(e)}')
-                        return redirect('monitoring:dashboard')
+                        meta_path = _save_uploaded_file(meta_file, temp_dir)
+                        expert_paths = {}
+                        for ef in expert_files:
+                            name = os.path.splitext(ef.name)[0]
+                            expert_paths[name] = _save_uploaded_file(ef, temp_dir)
 
-                    # Use MoE as the "model"; wrap it so services.py can call predict/predict_proba
-                    from .moe_service import MoESklearnWrapper
-                    wrapped_model = MoESklearnWrapper(moe)
+                        try:
+                            wrapped_model = create_moe_model(expert_paths, meta_path, moe_subtype=moe_subtype)
+                        except Exception as e:
+                            messages.error(request, f'MoE 模型載入失敗: {str(e)}')
+                            return redirect('monitoring:dashboard')
 
                     result = load_and_process(
                         data_path=data_path,
-                        model_path=None,            # no single joblib file
+                        model_path=None,
                         feature_str=features,
                         target_col=target_col,
                         train_path=train_path,
                         preloaded_model=wrapped_model,
+                        window_size_days=window_size_days,
+                        stride_days=stride_days,
                     )
 
                 else:
@@ -124,6 +172,8 @@ def dashboard_view(request):
                         feature_str=features,
                         target_col=target_col,
                         train_path=train_path,
+                        window_size_days=window_size_days,
+                        stride_days=stride_days,
                     )
 
                 if result['success']:
@@ -149,6 +199,9 @@ def dashboard_view(request):
                         'target_col': target_col,
                         'trend_window': trend_window,
                         'model_type': single_model_type,
+                        'auprc_threshold': auprc_threshold,
+                        'window_size_days': window_size_days,
+                        'stride_days': stride_days,
                     }
                     messages.success(request, result['message'])
                 else:
@@ -163,24 +216,36 @@ def dashboard_view(request):
 
                 # --- Model 1 ---
                 if m1_type == 'moe':
-                    m1_meta = request.FILES.get('m1_meta_learner')
-                    m1_experts = [ef for ef in request.FILES.getlist('m1_expert_files') if ef.size > 0]
-                    if not m1_meta or len(m1_experts) < 2:
-                        messages.error(request, 'M1 MoE：請上傳 Gating Network 和至少 2 個 Expert。')
-                        return redirect('monitoring:dashboard')
-                    m1_meta_path = _save_uploaded_file(m1_meta, temp_dir)
-                    m1_expert_paths = {os.path.splitext(ef.name)[0]: _save_uploaded_file(ef, temp_dir) for ef in m1_experts}
-                    try:
-                        from .moe_service import MoESklearnWrapper
-                        m1_moe = MoEModel(m1_expert_paths, m1_meta_path)
-                        m1_model = MoESklearnWrapper(m1_moe)
-                    except Exception as e:
-                        messages.error(request, f'M1 MoE 載入失敗: {str(e)}')
-                        return redirect('monitoring:dashboard')
+                    m1_moe_subtype = request.POST.get('m1_moe_subtype', 'optuna')
+                    if m1_moe_subtype == 'custom':
+                        m1_custom = request.FILES.get('m1_custom_model')
+                        if not m1_custom:
+                            messages.error(request, 'M1 Custom MoE：請上傳預打包模型。')
+                            return redirect('monitoring:dashboard')
+                        m1_custom_path = _save_uploaded_file(m1_custom, temp_dir)
+                        try:
+                            m1_model = create_moe_model({}, m1_custom_path, moe_subtype='custom')
+                        except Exception as e:
+                            messages.error(request, f'M1 Custom MoE 載入失敗: {str(e)}')
+                            return redirect('monitoring:dashboard')
+                    else:
+                        m1_meta = request.FILES.get('m1_meta_learner')
+                        m1_experts = [ef for ef in request.FILES.getlist('m1_expert_files') if ef.size > 0]
+                        if not m1_meta or len(m1_experts) < 2:
+                            messages.error(request, 'M1 MoE：請上傳 Router/Gating 和至少 2 個 Expert。')
+                            return redirect('monitoring:dashboard')
+                        m1_meta_path = _save_uploaded_file(m1_meta, temp_dir)
+                        m1_expert_paths = {os.path.splitext(ef.name)[0]: _save_uploaded_file(ef, temp_dir) for ef in m1_experts}
+                        try:
+                            m1_model = create_moe_model(m1_expert_paths, m1_meta_path, moe_subtype=m1_moe_subtype)
+                        except Exception as e:
+                            messages.error(request, f'M1 MoE 載入失敗: {str(e)}')
+                            return redirect('monitoring:dashboard')
                     result = load_and_process(
                         data_path=data_path, model_path=None,
                         feature_str=features, target_col=target_col,
                         train_path=train_path, preloaded_model=m1_model,
+                        window_size_days=window_size_days, stride_days=stride_days,
                     )
                 else:
                     # M1 EBM
@@ -193,6 +258,7 @@ def dashboard_view(request):
                         data_path=data_path, model_path=model_path,
                         feature_str=features, target_col=target_col,
                         train_path=train_path,
+                        window_size_days=window_size_days, stride_days=stride_days,
                     )
 
                 if not result['success']:
@@ -214,31 +280,48 @@ def dashboard_view(request):
                 # --- Model 2 (comparison) ---
                 m2_type = request.POST.get('m2_type', 'ebm')
                 if m2_type == 'moe':
-                    meta_file = request.FILES.get('m2_meta_learner')
-                    expert_files = [ef for ef in request.FILES.getlist('m2_expert_files') if ef.size > 0]
-                    if meta_file and expert_files:
-                        meta_path = _save_uploaded_file(meta_file, temp_dir)
-                        expert_paths = {}
-                        expert_names = []
-                        for ef in expert_files:
-                            name = os.path.splitext(ef.name)[0]
-                            expert_paths[name] = _save_uploaded_file(ef, temp_dir)
-                            expert_names.append(ef.name)
-                        try:
-                            from .moe_service import MoESklearnWrapper as MoEWrap2
-                            moe2 = MoEModel(expert_paths, meta_path)
-                            cache_data['moe_model'] = moe2
-                            cache_data['comparison_model_wrapped'] = MoEWrap2(moe2)
-                            cache_data['comparison_type'] = 'moe'
-                            cache_data['comparison_info'] = {
-                                'type': 'MoE (Optuna)',
-                                'meta_learner': meta_file.name,
-                                'experts': expert_names,
-                            }
-                        except Exception as e:
-                            messages.warning(request, f'M2 MoE 載入失敗: {str(e)}')
+                    m2_moe_subtype = request.POST.get('m2_moe_subtype', 'optuna')
+                    if m2_moe_subtype == 'custom':
+                        m2_custom = request.FILES.get('m2_custom_model')
+                        if m2_custom:
+                            m2_custom_path = _save_uploaded_file(m2_custom, temp_dir)
+                            try:
+                                m2_model = create_moe_model({}, m2_custom_path, moe_subtype='custom')
+                                cache_data['comparison_model_wrapped'] = m2_model
+                                cache_data['comparison_type'] = 'moe'
+                                cache_data['comparison_info'] = {
+                                    'type': 'MoE (Custom)',
+                                    'model_file': m2_custom.name,
+                                }
+                            except Exception as e:
+                                messages.warning(request, f'M2 Custom MoE 載入失敗: {str(e)}')
+                        else:
+                            messages.warning(request, 'M2 Custom MoE：請上傳預打包模型。')
                     else:
-                        messages.warning(request, 'M2 MoE：請上傳 Meta-Learner 和至少一個 Expert。')
+                        meta_file = request.FILES.get('m2_meta_learner')
+                        expert_files = [ef for ef in request.FILES.getlist('m2_expert_files') if ef.size > 0]
+                        if meta_file and expert_files:
+                            meta_path = _save_uploaded_file(meta_file, temp_dir)
+                            expert_paths = {}
+                            expert_names = []
+                            for ef in expert_files:
+                                name = os.path.splitext(ef.name)[0]
+                                expert_paths[name] = _save_uploaded_file(ef, temp_dir)
+                                expert_names.append(ef.name)
+                            try:
+                                m2_wrapped = create_moe_model(expert_paths, meta_path, moe_subtype=m2_moe_subtype)
+                                cache_data['comparison_model_wrapped'] = m2_wrapped
+                                cache_data['comparison_type'] = 'moe'
+                                subtype_label = 'Optuna' if m2_moe_subtype == 'optuna' else 'Standard'
+                                cache_data['comparison_info'] = {
+                                    'type': f'MoE ({subtype_label})',
+                                    'meta_learner': meta_file.name,
+                                    'experts': expert_names,
+                                }
+                            except Exception as e:
+                                messages.warning(request, f'M2 MoE 載入失敗: {str(e)}')
+                        else:
+                            messages.warning(request, 'M2 MoE：請上傳 Router/Gating 和至少一個 Expert。')
                 else:
                     # M2 EBM
                     cmp_model_file = request.FILES.get('m2_ebm_model')
@@ -303,7 +386,11 @@ def dashboard_view(request):
     llm_summary = None
     moe_metrics = None
     comparison_info = None
+    comparison_summary = None
+    longevity_metrics = None
     comparison_figure_json = None
+    comparison_warning_json = None
+    monthly_report_m2 = None
 
     if has_data:
         cached_data = cache.get(CACHE_KEY)
@@ -318,6 +405,7 @@ def dashboard_view(request):
                     final_feats=cached_data['features'],
                     target_col=cached_data['target_col'],
                     metrics_list=['AUPRC', 'AUROC', 'F1 score', 'JS divergence'],
+                    has_real_baseline=cached_data['baseline'] is not None,
                 )
                 figure_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
             except Exception as e:
@@ -363,7 +451,8 @@ def dashboard_view(request):
                 try:
                     m1_name = uploaded_files.get('model_file', 'Model 1')
                     m2_name = comparison_info.get('type', 'Model 2') if comparison_info else 'Model 2'
-                    comp_fig, comp_msg = build_comparison_figure(
+                    auprc_threshold = float(uploaded_files.get('auprc_threshold', 0.40))
+                    comp_figs, comp_msg = build_comparison_figure(
                         windows=cached_data['windows'],
                         dates=cached_data['dates'],
                         model_1=cached_data['model'],
@@ -373,8 +462,40 @@ def dashboard_view(request):
                         baseline=cached_data['baseline'],
                         model_1_name=m1_name,
                         model_2_name=m2_name,
+                        auprc_threshold=auprc_threshold,
                     )
-                    comparison_figure_json = json.dumps(comp_fig, cls=plotly.utils.PlotlyJSONEncoder)
+                    comparison_figure_json = json.dumps(comp_figs['main'], cls=plotly.utils.PlotlyJSONEncoder)
+                    comparison_warning_json = json.dumps(comp_figs['warning'], cls=plotly.utils.PlotlyJSONEncoder)
+
+                    # Compute comparison summary & longevity metrics
+                    df_m1 = compute_model_windows_metrics(
+                        cached_data['windows'], cached_data['dates'],
+                        cached_data['model'], cached_data['features'],
+                        cached_data['target_col'], cached_data['baseline']
+                    )
+                    df_m2 = compute_model_windows_metrics(
+                        cached_data['windows'], cached_data['dates'],
+                        m2_model, cached_data['features'],
+                        cached_data['target_col'], cached_data['baseline']
+                    )
+                    comparison_summary = compute_comparison_summary(df_m1, df_m2, m1_name, m2_name)
+                    longevity_metrics = compute_longevity_metrics(df_m1, df_m2, m1_name, m2_name)
+
+                    # Generate M2 monthly report
+                    try:
+                        monthly_report_m2 = generate_monthly_report(
+                            windows=cached_data['windows'],
+                            baseline_data=cached_data['baseline'],
+                            dates=cached_data['dates'],
+                            model=m2_model,
+                            final_feats=cached_data['features'],
+                            target_col=cached_data['target_col'],
+                            model_version=m2_name,
+                            trend_window=cached_data.get('trend_window', 5),
+                        )
+                    except Exception as e:
+                        logger.error(f"[dashboard] M2 monthly report failed: {e}")
+
                 except Exception as e:
                     logger.error(f"[dashboard] comparison figure failed: {e}")
                     moe_metrics = {'error': str(e)}
@@ -388,9 +509,13 @@ def dashboard_view(request):
         'alerts': alerts,
         'analysis_info': analysis_info,
         'monthly_report': monthly_report,
+        'monthly_report_m2': monthly_report_m2,
         'llm_summary': llm_summary,
         'moe_metrics': moe_metrics,
         'comparison_info': comparison_info,
         'comparison_figure_json': comparison_figure_json,
+        'comparison_warning_json': comparison_warning_json,
+        'comparison_summary': comparison_summary,
+        'longevity_metrics': longevity_metrics,
     }
     return render(request, 'monitoring/dashboard.html', context)

@@ -608,6 +608,126 @@
             color: #a5b4fc;
         }
 
+        /* Chart toggle bar */
+        .chart-toggle-bar {
+            display: flex;
+            gap: 8px;
+            margin: 12px 0;
+            flex-wrap: wrap;
+        }
+
+        .chart-toggle-btn {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            color: #64748b;
+            font-size: 12px;
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            font-family: inherit;
+        }
+
+        .chart-toggle-btn:hover {
+            border-color: rgba(99, 102, 241, 0.4);
+            color: #a5b4fc;
+        }
+
+        .chart-toggle-btn.active {
+            background: rgba(99, 102, 241, 0.15);
+            border-color: rgba(99, 102, 241, 0.5);
+            color: #c7d2fe;
+            box-shadow: 0 0 8px rgba(99, 102, 241, 0.15);
+        }
+
+        /* Advanced settings panel */
+        .advanced-settings-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #64748b;
+            margin: 8px 0;
+            user-select: none;
+            transition: color 0.2s;
+        }
+
+        .advanced-settings-toggle:hover {
+            color: #a5b4fc;
+        }
+
+        .advanced-panel {
+            display: none;
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin: 8px 0 16px 0;
+        }
+
+        .advanced-panel.open {
+            display: block;
+        }
+
+        .adv-row {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+
+        .adv-row label {
+            font-size: 12px;
+            color: #94a3b8;
+            min-width: 100px;
+        }
+
+        .adv-row input[type="number"] {
+            width: 80px;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            color: #e2e8f0;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: inherit;
+        }
+
+        .adv-row input[type="range"] {
+            width: 120px;
+            accent-color: #818cf8;
+        }
+
+        .adv-hint {
+            font-size: 11px;
+            color: #475569;
+        }
+
+        .btn-reset {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 16px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
+            font-size: 13px;
+            font-family: inherit;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-reset:hover {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: rgba(239, 68, 68, 0.5);
+            color: #fca5a5;
+        }
+
         .badges-container {
             display: flex;
             flex-wrap: wrap;
@@ -1075,6 +1195,118 @@
             color: #cbd5e1;
             line-height: 1.7;
         }
+
+        /* Comparison Summary Cards */
+        .comparison-summary {
+            margin-bottom: 16px;
+        }
+
+        .summary-winner {
+            text-align: center;
+            padding: 12px;
+            background: rgba(99, 102, 241, 0.08);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+
+        .summary-winner .winner-label {
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .summary-winner .winner-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: #a5b4fc;
+            margin-top: 4px;
+        }
+
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        .summary-table th {
+            padding: 8px 10px;
+            text-align: center;
+            color: #94a3b8;
+            border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .summary-table td {
+            padding: 8px 10px;
+            text-align: center;
+            color: #cbd5e1;
+            border-bottom: 1px solid rgba(99, 102, 241, 0.08);
+        }
+
+        .summary-table td.metric-name {
+            text-align: left;
+            font-weight: 600;
+            color: #a5b4fc;
+        }
+
+        .summary-table .winner-cell {
+            font-weight: 600;
+        }
+
+        .summary-table .positive { color: #6ee7b7; }
+        .summary-table .negative { color: #fca5a5; }
+
+        .longevity-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .longevity-card {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid rgba(99, 102, 241, 0.1);
+        }
+
+        .longevity-card-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+
+        .longevity-stat {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #cbd5e1;
+            padding: 3px 0;
+        }
+
+        .longevity-stat .stat-label {
+            color: #64748b;
+        }
+
+        .longevity-stat .stat-value {
+            font-weight: 600;
+        }
+
+        .longevity-stat .stat-value.good { color: #6ee7b7; }
+        .longevity-stat .stat-value.bad { color: #fca5a5; }
+
+        /* MoE Subtype dropdown */
+        .moe-subtype-row {
+            margin-bottom: 12px;
+        }
     </style>
 </head>
 <body>
@@ -1148,12 +1380,35 @@
                             </div>
                         </div>
 
+                        <!-- Advanced Settings Toggle -->
+                        <div class="advanced-settings-toggle" onclick="toggleAdvSettings()">
+                            <span id="adv-arrow">▶</span> 進階設定 (Advanced)
+                        </div>
+                        <div class="advanced-panel" id="adv-panel">
+                            <div class="adv-row">
+                                <label>Window Size (天)</label>
+                                <input type="number" name="window_size_days" value="90" min="7" max="365" step="1">
+                                <span class="adv-hint">每個滑動視窗的天數 (預設: 90)</span>
+                            </div>
+                            <div class="adv-row">
+                                <label>Step Size (天)</label>
+                                <input type="number" name="stride_days" value="30" min="7" max="365" step="7">
+                                <span class="adv-hint">滑動步長 (最小: 7天 = 一週)</span>
+                            </div>
+                            <div class="adv-row">
+                                <label>AUPRC 閥值</label>
+                                <input type="range" name="auprc_threshold" id="auprc-slider" value="0.40" min="0.1" max="0.9" step="0.05" oninput="document.getElementById('auprc-val').textContent=this.value">
+                                <span id="auprc-val" style="color: #e2e8f0; font-size: 12px; min-width: 30px;">0.40</span>
+                                <span class="adv-hint">模型壽命的最低可接受 AUPRC</span>
+                            </div>
+                        </div>
+
                         <!-- Model Type Selector -->
                         <div class="form-group">
                             <label>模型類型</label>
                             <select name="single_model_type" id="id_single_type" class="form-control">
                                 <option value="ebm">EBM</option>
-                                <option value="moe">MoE (Optuna)</option>
+                                <option value="moe">MoE</option>
                             </select>
                         </div>
 
@@ -1175,27 +1430,47 @@
                         <div id="single-moe-fields" style="display: none;">
                             <div class="moe-section">
                                 <div class="moe-section-label">🧠 MoE 模型組件</div>
-                                <div class="form-group">
-                                    <label>Gating Network (Joblib)</label>
-                                    <input type="file" name="single_meta_learner" accept=".joblib" class="form-control">
-                                    <div class="help-text">包含 Gating 模型 + Scaler + Config</div>
+                                <div class="form-group moe-subtype-row">
+                                    <label>MoE 架構子類型</label>
+                                    <select name="single_moe_subtype" id="id_single_moe_subtype" class="form-control">
+                                        <option value="optuna">Optuna (Meta-Learner + Experts)</option>
+                                        <option value="standard">Standard (Router + Experts)</option>
+                                        <option value="custom">Custom (單一預打包 .joblib)</option>
+                                    </select>
+                                    <div class="help-text">Optuna: 有 Meta-Learner 的架構。Standard: Router 權重加權 Expert。Custom: 已包裝為單一檔案。</div>
                                 </div>
-                                <label style="margin-bottom: 8px;">Expert Models (Joblib)</label>
-                                <div id="single-expert-list">
-                                    <div class="expert-entry">
-                                        <input type="file" name="single_expert_files" accept=".joblib" class="form-control">
-                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'single-expert-list')" title="移除">×</button>
+                                <!-- Optuna/Standard fields -->
+                                <div id="single-moe-component-fields">
+                                    <div class="form-group">
+                                        <label id="single-router-label">Gating Network (Joblib)</label>
+                                        <input type="file" name="single_meta_learner" accept=".joblib" class="form-control">
+                                        <div class="help-text" id="single-router-help">包含 Gating 模型 + Scaler + Config</div>
                                     </div>
-                                    <div class="expert-entry">
-                                        <input type="file" name="single_expert_files" accept=".joblib" class="form-control">
-                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'single-expert-list')" title="移除">×</button>
+                                    <label style="margin-bottom: 8px;">Expert Models (Joblib)</label>
+                                    <div id="single-expert-list">
+                                        <div class="expert-entry">
+                                            <input type="file" name="single_expert_files" accept=".joblib" class="form-control">
+                                            <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'single-expert-list')" title="移除">×</button>
+                                        </div>
+                                        <div class="expert-entry">
+                                            <input type="file" name="single_expert_files" accept=".joblib" class="form-control">
+                                            <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'single-expert-list')" title="移除">×</button>
+                                        </div>
+                                        <div class="expert-entry">
+                                            <input type="file" name="single_expert_files" accept=".joblib" class="form-control">
+                                            <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'single-expert-list')" title="移除">×</button>
+                                        </div>
                                     </div>
-                                    <div class="expert-entry">
-                                        <input type="file" name="single_expert_files" accept=".joblib" class="form-control">
-                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'single-expert-list')" title="移除">×</button>
+                                    <button type="button" class="btn-add-expert" onclick="addExpert('single_expert_files', 'single-expert-list')">＋ 新增 Expert</button>
+                                </div>
+                                <!-- Custom field -->
+                                <div id="single-moe-custom-field" style="display: none;">
+                                    <div class="form-group">
+                                        <label>Pre-packaged Model (Joblib)</label>
+                                        <input type="file" name="single_custom_model" accept=".joblib" class="form-control">
+                                        <div class="help-text">上傳已包含所有組件的單一 .joblib 檔案（需有 predict_proba 方法）</div>
                                     </div>
                                 </div>
-                                <button type="button" class="btn-add-expert" onclick="addExpert('single_expert_files', 'single-expert-list')">＋ 新增 Expert</button>
                             </div>
                         </div>
                     </div>
@@ -1235,7 +1510,7 @@
                             <label>Model 1 類型</label>
                             <select name="m1_type" id="id_m1_type" class="form-control">
                                 <option value="ebm">EBM</option>
-                                <option value="moe">MoE (Optuna)</option>
+                                <option value="moe">MoE</option>
                             </select>
                         </div>
 
@@ -1256,27 +1531,42 @@
                         <div id="m1-moe-fields" style="display: none;">
                             <div class="moe-section">
                                 <div class="moe-section-label">🧠 Model 1 — MoE 組件</div>
-                                <div class="form-group">
-                                    <label>Gating Network (Joblib)</label>
-                                    <input type="file" name="m1_meta_learner" accept=".joblib" class="form-control">
-                                    <div class="help-text">包含 Gating 模型 + Scaler + Config</div>
+                                <div class="form-group moe-subtype-row">
+                                    <label>MoE 架構</label>
+                                    <select name="m1_moe_subtype" id="id_m1_moe_subtype" class="form-control">
+                                        <option value="optuna">Optuna</option>
+                                        <option value="standard">Standard (Router)</option>
+                                        <option value="custom">Custom (單一檔案)</option>
+                                    </select>
                                 </div>
-                                <label style="margin-bottom: 8px;">Expert Models (Joblib)</label>
-                                <div id="m1-expert-list">
-                                    <div class="expert-entry">
-                                        <input type="file" name="m1_expert_files" accept=".joblib" class="form-control">
-                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm1-expert-list')" title="移除">×</button>
+                                <div id="m1-moe-component-fields">
+                                    <div class="form-group">
+                                        <label id="m1-router-label">Gating Network (Joblib)</label>
+                                        <input type="file" name="m1_meta_learner" accept=".joblib" class="form-control">
                                     </div>
-                                    <div class="expert-entry">
-                                        <input type="file" name="m1_expert_files" accept=".joblib" class="form-control">
-                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm1-expert-list')" title="移除">×</button>
+                                    <label style="margin-bottom: 8px;">Expert Models (Joblib)</label>
+                                    <div id="m1-expert-list">
+                                        <div class="expert-entry">
+                                            <input type="file" name="m1_expert_files" accept=".joblib" class="form-control">
+                                            <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm1-expert-list')" title="移除">×</button>
+                                        </div>
+                                        <div class="expert-entry">
+                                            <input type="file" name="m1_expert_files" accept=".joblib" class="form-control">
+                                            <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm1-expert-list')" title="移除">×</button>
+                                        </div>
+                                        <div class="expert-entry">
+                                            <input type="file" name="m1_expert_files" accept=".joblib" class="form-control">
+                                            <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm1-expert-list')" title="移除">×</button>
+                                        </div>
                                     </div>
-                                    <div class="expert-entry">
-                                        <input type="file" name="m1_expert_files" accept=".joblib" class="form-control">
-                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm1-expert-list')" title="移除">×</button>
+                                    <button type="button" class="btn-add-expert" onclick="addExpert('m1_expert_files', 'm1-expert-list')">＋ 新增 Expert</button>
+                                </div>
+                                <div id="m1-moe-custom-field" style="display: none;">
+                                    <div class="form-group">
+                                        <label>Pre-packaged Model (Joblib)</label>
+                                        <input type="file" name="m1_custom_model" accept=".joblib" class="form-control">
                                     </div>
                                 </div>
-                                <button type="button" class="btn-add-expert" onclick="addExpert('m1_expert_files', 'm1-expert-list')">＋ 新增 Expert</button>
                             </div>
                         </div>
 
@@ -1291,7 +1581,7 @@
                             <label>Model 2 類型</label>
                             <select name="m2_type" id="id_m2_type" class="form-control">
                                 <option value="ebm">EBM</option>
-                                <option value="moe" selected>MoE (Optuna)</option>
+                                <option value="moe" selected>MoE</option>
                             </select>
                         </div>
 
@@ -1312,34 +1602,55 @@
                         <div id="m2-moe-fields">
                             <div class="moe-section">
                                 <div class="moe-section-label">🧠 Model 2 — MoE 組件</div>
-                                <div class="form-group">
-                                    <label>Gating Network (Joblib)</label>
-                                    <input type="file" name="m2_meta_learner" accept=".joblib" class="form-control">
-                                    <div class="help-text">包含 Gating 模型 + Scaler + Config</div>
+                                <div class="form-group moe-subtype-row">
+                                    <label>MoE 架構</label>
+                                    <select name="m2_moe_subtype" id="id_m2_moe_subtype" class="form-control">
+                                        <option value="optuna">Optuna</option>
+                                        <option value="standard">Standard (Router)</option>
+                                        <option value="custom">Custom (單一檔案)</option>
+                                    </select>
                                 </div>
-                                <label style="margin-bottom: 8px;">Expert Models (Joblib)</label>
-                                <div id="m2-expert-list">
-                                    <div class="expert-entry">
-                                        <input type="file" name="m2_expert_files" accept=".joblib" class="form-control">
-                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm2-expert-list')" title="移除">×</button>
+                                <div id="m2-moe-component-fields">
+                                    <div class="form-group">
+                                        <label id="m2-router-label">Gating Network (Joblib)</label>
+                                        <input type="file" name="m2_meta_learner" accept=".joblib" class="form-control">
                                     </div>
-                                    <div class="expert-entry">
-                                        <input type="file" name="m2_expert_files" accept=".joblib" class="form-control">
-                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm2-expert-list')" title="移除">×</button>
+                                    <label style="margin-bottom: 8px;">Expert Models (Joblib)</label>
+                                    <div id="m2-expert-list">
+                                        <div class="expert-entry">
+                                            <input type="file" name="m2_expert_files" accept=".joblib" class="form-control">
+                                            <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm2-expert-list')" title="移除">×</button>
+                                        </div>
+                                        <div class="expert-entry">
+                                            <input type="file" name="m2_expert_files" accept=".joblib" class="form-control">
+                                            <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm2-expert-list')" title="移除">×</button>
+                                        </div>
+                                        <div class="expert-entry">
+                                            <input type="file" name="m2_expert_files" accept=".joblib" class="form-control">
+                                            <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm2-expert-list')" title="移除">×</button>
+                                        </div>
                                     </div>
-                                    <div class="expert-entry">
-                                        <input type="file" name="m2_expert_files" accept=".joblib" class="form-control">
-                                        <button type="button" class="btn-remove-expert" onclick="removeExpert(this, 'm2-expert-list')" title="移除">×</button>
+                                    <button type="button" class="btn-add-expert" onclick="addExpert('m2_expert_files', 'm2-expert-list')">＋ 新增 Expert</button>
+                                </div>
+                                <div id="m2-moe-custom-field" style="display: none;">
+                                    <div class="form-group">
+                                        <label>Pre-packaged Model (Joblib)</label>
+                                        <input type="file" name="m2_custom_model" accept=".joblib" class="form-control">
                                     </div>
                                 </div>
-                                <button type="button" class="btn-add-expert" onclick="addExpert('m2_expert_files', 'm2-expert-list')">＋ 新增 Expert</button>
                             </div>
                         </div>
                     </div>
 
-                    <button type="submit" class="btn-primary" id="submit-btn" style="margin-top: 16px;">
-                        🚀 開始分析
-                    </button>
+                    <div style="display: flex; gap: 8px; margin-top: 16px;">
+                        <button type="submit" class="btn-primary" id="submit-btn" style="flex: 1;">
+                            🚀 開始分析
+                        </button>
+                        <a href="{% url 'monitoring:reset' %}" class="btn-reset" id="reset-btn"
+                           onclick="return confirm('確定要清除所有資料與分析結果嗎？');">
+                            🗑️ 重置
+                        </a>
+                    </div>
                 </form>
 
                 <script>
@@ -1377,6 +1688,37 @@
                     setupModelToggle('id_m2_type', 'm2-ebm-fields', 'm2-moe-fields');
                     setupModelToggle('id_single_type', 'single-ebm-fields', 'single-moe-fields');
 
+                    // === MoE Subtype Toggle ===
+                    function setupMoeSubtypeToggle(selectId, componentId, customId, labelId, helpId) {
+                        var sel = document.getElementById(selectId);
+                        if (!sel) return;
+                        sel.addEventListener('change', function() {
+                            var comp = document.getElementById(componentId);
+                            var cust = document.getElementById(customId);
+                            var label = document.getElementById(labelId);
+                            if (this.value === 'custom') {
+                                if (comp) comp.style.display = 'none';
+                                if (cust) cust.style.display = 'block';
+                            } else {
+                                if (comp) comp.style.display = 'block';
+                                if (cust) cust.style.display = 'none';
+                                if (label) {
+                                    label.textContent = this.value === 'standard' ? 'Router (Joblib)' : 'Gating Network (Joblib)';
+                                }
+                                if (helpId && document.getElementById(helpId)) {
+                                    document.getElementById(helpId).textContent =
+                                        this.value === 'standard'
+                                            ? 'Router 模型，輸出每個 Expert 的權重'
+                                            : '包含 Gating 模型 + Scaler + Config';
+                                }
+                            }
+                        });
+                    }
+
+                    setupMoeSubtypeToggle('id_single_moe_subtype', 'single-moe-component-fields', 'single-moe-custom-field', 'single-router-label', 'single-router-help');
+                    setupMoeSubtypeToggle('id_m1_moe_subtype', 'm1-moe-component-fields', 'm1-moe-custom-field', 'm1-router-label', null);
+                    setupMoeSubtypeToggle('id_m2_moe_subtype', 'm2-moe-component-fields', 'm2-moe-custom-field', 'm2-router-label', null);
+
                     // === Dynamic Expert Add/Remove ===
                     function addExpert(inputName, listId) {
                         var entry = document.createElement('div');
@@ -1401,6 +1743,10 @@
                         btn.innerHTML = '⏳ 分析中...';
                         btn.style.opacity = '0.7';
 
+                        // Hide completed state, show animated progress
+                        var completed = document.getElementById('analysis-completed');
+                        if (completed) completed.style.display = 'none';
+
                         var progress = document.getElementById('analysis-progress');
                         if (progress) {
                             progress.style.display = 'block';
@@ -1409,6 +1755,12 @@
                                 document.getElementById('step-2'),
                                 document.getElementById('step-3')
                             ];
+                            // Reset all steps first
+                            steps.forEach(function(s) {
+                                if (s) {
+                                    s.classList.remove('active', 'done');
+                                }
+                            });
                             steps[0].classList.add('active');
                             setTimeout(function() {
                                 steps[0].classList.remove('active');
@@ -1457,9 +1809,8 @@
                 {% endif %}
 
                 <!-- Analysis Progress -->
-                {% if has_data %}
-                <!-- Already loaded: show completed state -->
-                <div style="margin-top: 16px;">
+                <!-- Completed state (visible when has_data, hidden on re-submit) -->
+                <div id="analysis-completed" style="{% if has_data %}display: block;{% else %}display: none;{% endif %} margin-top: 16px;">
                     <div style="font-size: 13px; font-weight: 600; color: #6ee7b7; margin-bottom: 10px;">✅ 分析完成</div>
                     <div class="progress-steps">
                         <div class="progress-step done"><div class="step-dot"></div><span>資料載入與預處理</span></div>
@@ -1467,8 +1818,7 @@
                         <div class="progress-step done"><div class="step-dot"></div><span>生成月報與 AI 分析</span></div>
                     </div>
                 </div>
-                {% else %}
-                <!-- Not loaded: show animated progress only while submitting -->
+                <!-- Animated progress (always present, shown by JS on submit) -->
                 <div id="analysis-progress" style="display: none; margin-top: 16px;">
                     <div style="font-size: 13px; font-weight: 600; color: #a5b4fc; margin-bottom: 10px;">⏳ 分析進行中...</div>
                     <div class="progress-steps">
@@ -1477,7 +1827,6 @@
                         <div class="progress-step" id="step-3"><div class="step-dot"></div><span>生成月報與 AI 分析</span></div>
                     </div>
                 </div>
-                {% endif %}
             </div>
 
         </div>
@@ -1527,6 +1876,10 @@
                         </button>
                     </div>
                     <div id="report-content">
+                        <!-- Model 1 label (shown in comparison mode) -->
+                        {% if monthly_report_m2 %}
+                        <div class="report-subtitle" style="color: #E65100;">Model 1 — {{ monthly_report.basic_info.model_version }}</div>
+                        {% endif %}
                         <!-- Basic Info -->
                         <div class="report-grid">
                             <div class="report-info-card">
@@ -1570,7 +1923,7 @@
                             {% endfor %}
                         </div>
 
-                        <!-- Additional Metrics -->
+                        <!-- Additional Metrics (M1) -->
                         <div class="report-subtitle">附加指標</div>
                         <div class="additional-metrics-row">
                             <span class="addl-metric">F1: {{ monthly_report.additional.F1 }}
@@ -1584,6 +1937,61 @@
                             </span>
                         </div>
 
+                        {% if monthly_report_m2 and monthly_report_m2.basic_info and not monthly_report_m2.basic_info.error %}
+                        <!-- ========== Model 2 Report ========== -->
+                        <div style="margin-top: 20px; padding-top: 16px; border-top: 2px solid rgba(0,150,136,0.3);">
+                            <div class="report-subtitle" style="color: #00897B;">Model 2 — {{ monthly_report_m2.basic_info.model_version }}</div>
+                            <div class="report-grid">
+                                <div class="report-info-card">
+                                    <div class="report-info-label">總樣本</div>
+                                    <div class="report-info-value">{{ monthly_report_m2.basic_info.total }} 筆</div>
+                                </div>
+                                <div class="report-info-card">
+                                    <div class="report-info-label">正例比例</div>
+                                    <div class="report-info-value">{{ monthly_report_m2.basic_info.prevalence }}%</div>
+                                </div>
+                                <div class="report-info-card">
+                                    <div class="report-info-label">準確率</div>
+                                    <div class="report-info-value">{{ monthly_report_m2.basic_info.accuracy }}%</div>
+                                </div>
+                                <div class="report-info-card">
+                                    <div class="report-info-label">錯誤率</div>
+                                    <div class="report-info-value">{{ monthly_report_m2.basic_info.error_rate }}%</div>
+                                </div>
+                            </div>
+
+                            <div class="report-accuracy-row">
+                                <span class="accuracy-correct">預測正確：{{ monthly_report_m2.basic_info.correct }} 筆（{{ monthly_report_m2.basic_info.accuracy }}%）</span>
+                                <span class="accuracy-incorrect">預測錯誤：{{ monthly_report_m2.basic_info.incorrect }} 筆（{{ monthly_report_m2.basic_info.error_rate }}%）</span>
+                            </div>
+
+                            <!-- Safety Gates (M2) -->
+                            <div class="report-subtitle">安全閘門 (Model 2)</div>
+                            <div class="safety-gates-row">
+                                {% for gate in monthly_report_m2.safety_gates %}
+                                <div class="gate-item {% if gate.passed %}gate-pass{% else %}gate-fail{% endif %}">
+                                    <div class="gate-indicator">{% if gate.passed %}PASS{% else %}FAIL{% endif %}</div>
+                                    <div class="gate-metric">{{ gate.label }}</div>
+                                    <div class="gate-value">{{ gate.value }}</div>
+                                    <div class="gate-threshold">門檻 {{ gate.threshold }}</div>
+                                    <div class="gate-gauge">
+                                        <div class="gate-gauge-fill" style="width: {{ gate.gauge_pct }}%"></div>
+                                        <div class="gate-gauge-threshold" style="left: {{ gate.threshold_pct }}%" data-label="門檻"></div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            <!-- Additional Metrics (M2) -->
+                            <div class="report-subtitle">附加指標 (Model 2)</div>
+                            <div class="additional-metrics-row">
+                                <span class="addl-metric">F1: {{ monthly_report_m2.additional.F1 }}</span>
+                                <span class="addl-metric">ECE: {{ monthly_report_m2.additional.ECE }}</span>
+                                <span class="addl-metric">Brier: {{ monthly_report_m2.additional.Brier }}</span>
+                            </div>
+                        </div>
+                        {% endif %}
+
                         <!-- LLM Summary -->
                         {% if llm_summary %}
                         <div class="report-subtitle">AI 分析摘要</div>
@@ -1594,7 +2002,7 @@
                 {% endif %}
 
                 {% if comparison_figure_json %}
-                <!-- ==================== Model Comparison Chart ==================== -->
+                <!-- ==================== Model Comparison Charts ==================== -->
                 <div class="report-section" style="margin-top: 16px;">
                     <div class="alerts-header-row">
                         <div class="alerts-header">⚔️ 模型比較圖表</div>
@@ -1605,21 +2013,151 @@
                     <div id="compare-content">
                         {% if comparison_info %}
                         <div style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">
-                            {% if comparison_info.type == 'MoE (Optuna)' %}
-                            <span style="color: #818cf8;">🧠 Meta-Learner:</span> {{ comparison_info.meta_learner }}
-                            · <span style="color: #818cf8;">Experts:</span> {{ comparison_info.experts|length }} 個
+                            {% if 'MoE' in comparison_info.type %}
+                            <span style="color: #818cf8;">🧠 {{ comparison_info.type }}:</span>
+                            {% if comparison_info.meta_learner %}
+                                {{ comparison_info.meta_learner }} · <span style="color: #818cf8;">Experts:</span> {{ comparison_info.experts|length }} 個
+                            {% elif comparison_info.model_file %}
+                                {{ comparison_info.model_file }}
+                            {% endif %}
                             {% else %}
                             <span style="color: #818cf8;">📦 Model 2:</span> {{ comparison_info.model_file }}
                             {% endif %}
                             <br>
-                            <span style="color: #64748b; font-size: 11px;">兩個模型使用相同的 90 天時間窗格進行比較分析，實線 = Model 1、虛線 = Model 2</span>
+                            <span style="color: #64748b; font-size: 11px;">
+                                圖表一合併「壽命軌跡」與「Δ Performance 長條圖」，可透過圖例群組開關顯示/隱藏各層。
+                                圖表二為「ECE + Entropy」模型信心預警圖。
+                            </span>
                         </div>
                         {% endif %}
 
-                        <div id="comparison-chart" style="width: 100%;"></div>
+                        <!-- Comparison Summary Cards -->
+                        {% if comparison_summary %}
+                        <div class="comparison-summary">
+                            <div class="summary-winner">
+                                <div class="winner-label">🏆 總體勝出者（平均表現）</div>
+                                <div class="winner-name">{{ comparison_summary.overall_winner }}</div>
+                            </div>
+
+                            <table class="summary-table">
+                                <thead>
+                                    <tr>
+                                        <th>指標</th>
+                                        <th>{{ comparison_summary.m1_name }} (AVG±STD)</th>
+                                        <th>{{ comparison_summary.m2_name }} (AVG±STD)</th>
+                                        <th>差值 (M1-M2)</th>
+                                        <th>勝出</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in comparison_summary.metrics_table %}
+                                    <tr>
+                                        <td class="metric-name">{{ row.metric }}</td>
+                                        <td>{{ row.m1_avg }} ± {{ row.m1_std }}</td>
+                                        <td>{{ row.m2_avg }} ± {{ row.m2_std }}</td>
+                                        <td class="{% if row.diff > 0 %}positive{% elif row.diff < 0 %}negative{% endif %}">{% if row.diff > 0 %}+{% endif %}{{ row.diff }}</td>
+                                        <td class="winner-cell">{{ row.winner }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% endif %}
+
+                        <!-- Longevity Metrics -->
+                        {% if longevity_metrics %}
+                        <div class="comparison-summary">
+                            <div class="summary-winner">
+                                <div class="winner-label">⏳ 模型壽命勝出者（維持效能較久）</div>
+                                <div class="winner-name">{{ longevity_metrics.longevity_winner }}</div>
+                            </div>
+
+                            <div class="longevity-cards">
+                                <div class="longevity-card">
+                                    <div class="longevity-card-title">{{ longevity_metrics.m1.name }}</div>
+                                    <div class="longevity-stat">
+                                        <span class="stat-label">最長連續達標窗格</span>
+                                        <span class="stat-value">{{ longevity_metrics.m1.max_consecutive }} / {{ longevity_metrics.m1.n_windows }}</span>
+                                    </div>
+                                    <div class="longevity-stat">
+                                        <span class="stat-label">達標率 (AUPRC≥{{ longevity_metrics.auprc_threshold }})</span>
+                                        <span class="stat-value {% if longevity_metrics.m1.pct_above >= 80 %}good{% elif longevity_metrics.m1.pct_above < 50 %}bad{% endif %}">{{ longevity_metrics.m1.pct_above }}%</span>
+                                    </div>
+                                    <div class="longevity-stat">
+                                        <span class="stat-label">趨勢斜率</span>
+                                        <span class="stat-value {% if longevity_metrics.m1.trend_slope >= 0 %}good{% else %}bad{% endif %}">{{ longevity_metrics.m1.trend_slope }}</span>
+                                    </div>
+                                    <div class="longevity-stat">
+                                        <span class="stat-label">首次不達標窗格</span>
+                                        <span class="stat-value">{% if longevity_metrics.m1.first_degradation %}第 {{ longevity_metrics.m1.first_degradation }} 窗{% else %}全部達標 ✅{% endif %}</span>
+                                    </div>
+                                </div>
+                                <div class="longevity-card">
+                                    <div class="longevity-card-title">{{ longevity_metrics.m2.name }}</div>
+                                    <div class="longevity-stat">
+                                        <span class="stat-label">最長連續達標窗格</span>
+                                        <span class="stat-value">{{ longevity_metrics.m2.max_consecutive }} / {{ longevity_metrics.m2.n_windows }}</span>
+                                    </div>
+                                    <div class="longevity-stat">
+                                        <span class="stat-label">達標率 (AUPRC≥{{ longevity_metrics.auprc_threshold }})</span>
+                                        <span class="stat-value {% if longevity_metrics.m2.pct_above >= 80 %}good{% elif longevity_metrics.m2.pct_above < 50 %}bad{% endif %}">{{ longevity_metrics.m2.pct_above }}%</span>
+                                    </div>
+                                    <div class="longevity-stat">
+                                        <span class="stat-label">趨勢斜率</span>
+                                        <span class="stat-value {% if longevity_metrics.m2.trend_slope >= 0 %}good{% else %}bad{% endif %}">{{ longevity_metrics.m2.trend_slope }}</span>
+                                    </div>
+                                    <div class="longevity-stat">
+                                        <span class="stat-label">首次不達標窗格</span>
+                                        <span class="stat-value">{% if longevity_metrics.m2.first_degradation %}第 {{ longevity_metrics.m2.first_degradation }} 窗{% else %}全部達標 ✅{% endif %}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Chart Toggle Buttons -->
+                        <div class="chart-toggle-bar">
+                            <button class="chart-toggle-btn active" id="btn-main-chart" onclick="toggleCompChart('comp-main-chart', this)">
+                                📈 壽命軌跡 × Δ Performance
+                            </button>
+                            <button class="chart-toggle-btn active" id="btn-warning-chart" onclick="toggleCompChart('comp-warning-chart', this)">
+                                🚨 預警指標 (ECE + Entropy)
+                            </button>
+                        </div>
+
+                        <!-- Chart 1: Main overlay (Survival + Delta + Drift) -->
+                        <div id="comp-main-chart" style="width: 100%;"></div>
+
+                        <!-- Chart 2: Early Warning (ECE + Entropy) -->
+                        {% if comparison_warning_json %}
+                        <div id="comp-warning-chart" style="width: 100%; margin-top: 8px;"></div>
+                        {% endif %}
+
                         <script>
-                            var compData = {{ comparison_figure_json|safe }};
-                            Plotly.newPlot('comparison-chart', compData.data, compData.layout, {responsive: true});
+                            // Render main comparison chart
+                            var compMainData = {{ comparison_figure_json|safe }};
+                            Plotly.newPlot('comp-main-chart', compMainData.data, compMainData.layout, {responsive: true});
+
+                            {% if comparison_warning_json %}
+                            // Render warning chart
+                            var compWarningData = {{ comparison_warning_json|safe }};
+                            Plotly.newPlot('comp-warning-chart', compWarningData.data, compWarningData.layout, {responsive: true});
+                            {% endif %}
+
+                            // Toggle chart visibility
+                            function toggleCompChart(chartId, btn) {
+                                var el = document.getElementById(chartId);
+                                if (!el) return;
+                                if (el.style.display === 'none') {
+                                    el.style.display = 'block';
+                                    btn.classList.add('active');
+                                    // Re-render to fix sizing
+                                    Plotly.Plots.resize(el);
+                                } else {
+                                    el.style.display = 'none';
+                                    btn.classList.remove('active');
+                                }
+                            }
                         </script>
                     </div>
                 </div>
@@ -1802,6 +2340,20 @@
                         } else {
                             content.style.display = 'none';
                             btn.textContent = '展開 ▼';
+                        }
+                    }
+
+                    // === Advanced Settings Panel Toggle ===
+                    function toggleAdvSettings() {
+                        var panel = document.getElementById('adv-panel');
+                        var arrow = document.getElementById('adv-arrow');
+                        if (!panel) return;
+                        if (panel.classList.contains('open')) {
+                            panel.classList.remove('open');
+                            arrow.textContent = '▶';
+                        } else {
+                            panel.classList.add('open');
+                            arrow.textContent = '▼';
                         }
                     }
                 </script>

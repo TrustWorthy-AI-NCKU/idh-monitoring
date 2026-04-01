@@ -100,6 +100,25 @@ class MoEModel:
     MoE 推論模型。載入 3 個 Expert + GB Meta-Learner，執行融合推論。
     """
 
+    # Expected internal expert names (used by create_enhanced_features and expert_weights)
+    EXPECTED_EXPERTS = ['TN_1', 'CY_1', 'TNCY_cas2']
+
+    @staticmethod
+    def _match_expert_name(filename):
+        """
+        Map an uploaded filename to the expected internal expert name.
+        e.g. 'TN_1.joblib' → 'TN_1', 'best_CY_1_model.joblib' → 'CY_1'
+        """
+        fn = filename.upper()
+        # Order matters: check TNCY before TN (TNCY contains TN)
+        if 'TNCY' in fn:
+            return 'TNCY_cas2'
+        elif 'TN' in fn:
+            return 'TN_1'
+        elif 'CY' in fn:
+            return 'CY_1'
+        return None
+
     def __init__(self, expert_paths, meta_learner_path):
         """
         Args:
@@ -107,12 +126,21 @@ class MoEModel:
             meta_learner_path: path to moe_gb_meta_learner.joblib
         """
         self.experts = {}
-        self.expert_names = ['TN_1', 'CY_1', 'TNCY_cas2']
 
-        # Load experts
-        for name, path in expert_paths.items():
-            self.experts[name] = joblib.load(path)
-            logger.info(f"[MoE] Loaded expert: {name}")
+        # Map uploaded names to expected internal names
+        for uploaded_name, path in expert_paths.items():
+            internal_name = self._match_expert_name(uploaded_name)
+            if internal_name is None:
+                internal_name = uploaded_name  # fallback: use as-is
+                logger.warning(f"[MoE] Cannot map expert '{uploaded_name}' to TN/CY/TNCY, using original name")
+            self.experts[internal_name] = joblib.load(path)
+            logger.info(f"[MoE] Loaded expert: {uploaded_name} → {internal_name}")
+
+        # Validate: check all 3 expected experts are present
+        missing = [n for n in self.EXPECTED_EXPERTS if n not in self.experts]
+        if missing:
+            logger.warning(f"[MoE] Missing expected experts: {missing}. "
+                           f"Loaded: {list(self.experts.keys())}")
 
         # Load meta-learner bundle
         bundle = joblib.load(meta_learner_path)
@@ -153,7 +181,22 @@ class MoEModel:
         # Get expert predictions
         expert_probs = {}
         for name, model in self.experts.items():
-            expert_probs[name] = model.predict_proba(X)[:, 1]
+            try:
+                expert_probs[name] = model.predict_proba(X)[:, 1]
+            except Exception as e:
+                logger.error(f"[MoE] Expert '{name}' predict_proba failed: "
+                             f"{type(e).__name__}: {e}. "
+                             f"X columns: {list(X.columns)[:10]}...")
+                raise
+
+        # Validate all 3 expected keys exist
+        for key in self.EXPECTED_EXPERTS:
+            if key not in expert_probs:
+                raise KeyError(
+                    f"Expert '{key}' not found in predictions. "
+                    f"Available: {list(expert_probs.keys())}. "
+                    f"Please ensure expert files are named with TN/CY/TNCY in the filename."
+                )
 
         # Create enhanced features
         X_enhanced = create_enhanced_features(
@@ -226,6 +269,113 @@ class MoEModel:
         return metrics, final_probs, expert_probs
 
 
+class StandardMoEModel:
+    """
+    Standard MoE 推論模型：input → router → expert_weights → weighted sum of experts.
+
+    Router 是一個 classifier 或 regression model，輸出每個 expert 的權重。
+    如果 router.predict_proba() 存在，用它輸出 (N, K) 的權重矩陣。
+    否則使用 router.predict() 並做 one-hot。
+    """
+
+    def __init__(self, expert_paths, router_path):
+        """
+        Args:
+            expert_paths: dict like {'expert_0': path, 'expert_1': path, ...}
+            router_path: path to router model .joblib
+        """
+        self.experts = {}
+        self.expert_order = sorted(expert_paths.keys())
+
+        # Load experts
+        for name, path in expert_paths.items():
+            self.experts[name] = joblib.load(path)
+            logger.info(f"[StandardMoE] Loaded expert: {name}")
+
+        # Load router
+        self.router = joblib.load(router_path)
+        logger.info(f"[StandardMoE] Loaded router ({type(self.router).__name__})")
+
+    def predict_proba(self, X):
+        """
+        執行 Standard MoE 推論。
+
+        Returns:
+            final_probs: np.array of probabilities
+            expert_probs: dict of {name: np.array}
+        """
+        X_input = X.copy()
+
+        # Convert Session_Date to numeric if present
+        if 'Session_Date' in X_input.columns:
+            X_input['Session_Date'] = pd.to_datetime(
+                X_input['Session_Date']).astype('int64') // 10**9
+
+        # Get expert predictions
+        expert_probs = {}
+        for name in self.expert_order:
+            model = self.experts[name]
+            expert_probs[name] = model.predict_proba(X_input)[:, 1]
+
+        # Get routing weights from router
+        # Router should output (N, K) where K = number of experts
+        if hasattr(self.router, 'predict_proba'):
+            weights = self.router.predict_proba(X_input)  # (N, K)
+            # If router outputs fewer columns than experts, pad with equal weights
+            if weights.shape[1] < len(self.expert_order):
+                n_missing = len(self.expert_order) - weights.shape[1]
+                padding = np.full((weights.shape[0], n_missing),
+                                  1.0 / len(self.expert_order))
+                weights = np.hstack([weights, padding])
+            elif weights.shape[1] > len(self.expert_order):
+                weights = weights[:, :len(self.expert_order)]
+        else:
+            # Fallback: equal weights
+            n_experts = len(self.expert_order)
+            weights = np.full((len(X_input), n_experts), 1.0 / n_experts)
+
+        # Weighted combination
+        expert_preds = np.column_stack(
+            [expert_probs[name] for name in self.expert_order]
+        )
+        final_probs = np.sum(weights * expert_preds, axis=1)
+        final_probs = np.clip(final_probs, 0.0, 1.0)
+
+        return final_probs, expert_probs
+
+
+def create_moe_model(expert_paths, router_or_meta_path, moe_subtype='optuna'):
+    """
+    Factory function: 根據 moe_subtype 建立對應的 MoE 模型。
+
+    Args:
+        expert_paths: dict {name: path} for expert models
+        router_or_meta_path: path to router (.joblib) or meta-learner (.joblib)
+        moe_subtype: 'optuna' | 'standard' | 'custom'
+
+    Returns:
+        MoESklearnWrapper wrapping the appropriate MoE model
+    """
+    if moe_subtype == 'optuna':
+        moe = MoEModel(expert_paths, router_or_meta_path)
+        return MoESklearnWrapper(moe)
+    elif moe_subtype == 'standard':
+        moe = StandardMoEModel(expert_paths, router_or_meta_path)
+        return MoESklearnWrapper(moe, source_model_type='standard')
+    elif moe_subtype == 'custom':
+        # Custom: load a single pre-packaged .joblib
+        model = joblib.load(router_or_meta_path)
+        wrapper = MoESklearnWrapper.__new__(MoESklearnWrapper)
+        wrapper.moe = model
+        wrapper.feature_names_in_ = getattr(model, 'feature_names_in_', [])
+        wrapper.is_moe = True
+        wrapper._custom = True
+        wrapper._source_type = 'custom'
+        return wrapper
+    else:
+        raise ValueError(f"Unknown moe_subtype: {moe_subtype}")
+
+
 def load_moe_from_uploads(expert_files, meta_learner_file):
     """
     從上傳的檔案路徑載入 MoE 模型（供 views.py 呼叫）。
@@ -244,18 +394,23 @@ def load_moe_from_uploads(expert_files, meta_learner_file):
 
 class MoESklearnWrapper:
     """
-    Wraps MoEModel so it looks like a sklearn classifier.
+    Wraps MoEModel / StandardMoEModel so it looks like a sklearn classifier.
     Provides predict() and predict_proba() compatible with services.py.
     """
 
-    def __init__(self, moe_model: MoEModel):
+    def __init__(self, moe_model, source_model_type='optuna'):
         self.moe = moe_model
+        self._source_type = source_model_type
+        self._custom = False
         # Expose feature_names_in_ so load_and_process can auto-detect features
         self.feature_names_in_ = []
         self.is_moe = True  # Flag to tell services.py to pass full dataframe
 
     def predict_proba(self, X):
         """Returns (N, 2) array like sklearn, column 0 = neg, column 1 = pos."""
+        if self._custom:
+            # Custom model: call directly
+            return self.moe.predict_proba(X)
         final_probs, _ = self.moe.predict_proba(X)
         return np.column_stack([1 - final_probs, final_probs])
 
@@ -263,3 +418,4 @@ class MoESklearnWrapper:
         """Returns binary predictions (0/1)."""
         proba = self.predict_proba(X)[:, 1]
         return (proba >= threshold).astype(int)
+

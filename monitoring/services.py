@@ -2,6 +2,8 @@
 Core computation logic for Model Monitoring.
 Extracted from model_monitoring_UI_251217.py — no UI dependencies.
 """
+import logging
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 import numpy as np
@@ -60,11 +62,14 @@ def sliding_windows_exact(df, window_size_days=90, stride_days=30):
     if 'Session_Date' not in df.columns or df.empty:
         return [], []
 
+    # Dynamic min samples: smaller windows need lower threshold
+    min_samples = max(3, window_size_days // 15)
+
     start_date = df['Session_Date'].min()
     end_date = df['Session_Date'].max()
     current_start = start_date
 
-    max_steps = 200
+    max_steps = 500
     step = 0
 
     while current_start < end_date and step < max_steps:
@@ -72,7 +77,7 @@ def sliding_windows_exact(df, window_size_days=90, stride_days=30):
         mask = (df['Session_Date'] >= current_start) & (df['Session_Date'] < current_end)
         window_df = df.loc[mask]
 
-        if len(window_df) > 5:
+        if len(window_df) > min_samples:
             windows.append(window_df)
             window_metrics_dates.append(current_end)
 
@@ -120,6 +125,7 @@ def get_metrics(model, X, y):
 
         return {'AUROC': roc, 'AUPRC': auprc, 'F1 score': f1}, None
     except Exception as e:
+        logger.error(f"[get_metrics] predict failed: {type(e).__name__}: {e}")
         return None, str(e)
 
 
@@ -278,7 +284,8 @@ def compute_avg_psi(df_base, df_curr, features) -> float:
 # ==========================================
 
 def load_and_process(data_path, model_path, feature_str, target_col,
-                     train_path=None, preloaded_model=None):
+                     train_path=None, preloaded_model=None,
+                     window_size_days=90, stride_days=30):
     """
     Full pipeline: load data, model, slice windows, compute metrics + drift.
     Returns a dict with all results needed for plotting.
@@ -286,6 +293,8 @@ def load_and_process(data_path, model_path, feature_str, target_col,
     Args:
         preloaded_model: If provided, skip joblib.load(model_path) and use this directly.
                          Useful for MoE models assembled from multiple files.
+        window_size_days: Size of each time window in days (default: 90)
+        stride_days: Step size in days between windows (default: 30)
     """
     result = {
         'success': False,
@@ -344,7 +353,7 @@ def load_and_process(data_path, model_path, feature_str, target_col,
 
         # Preprocess and slice
         df_clean = preprocess_data(df)
-        windows, dates = sliding_windows_exact(df_clean)
+        windows, dates = sliding_windows_exact(df_clean, window_size_days, stride_days)
 
         # Baseline
         df_baseline = None
@@ -382,7 +391,8 @@ def load_and_process(data_path, model_path, feature_str, target_col,
 # 6. Build Dashboard Figure
 # ==========================================
 
-def build_dashboard_figure(windows, baseline_data, dates, model, final_feats, target_col, metrics_list):
+def build_dashboard_figure(windows, baseline_data, dates, model, final_feats,
+                           target_col, metrics_list=None, has_real_baseline=True):
     """
     Build the combined Plotly figure: performance line chart + feature drift heatmap.
     
@@ -397,8 +407,13 @@ def build_dashboard_figure(windows, baseline_data, dates, model, final_feats, ta
     else:
         baseline = windows[0]
 
+    # Skip drift if no real baseline (e.g. MoE without training data)
+    compute_drift = has_real_baseline
+
     # Storage
-    res_perf = {'Date': [], 'AUROC': [], 'AUPRC': [], 'F1 score': [], 'JS divergence': []}
+    res_perf = {'Date': [], 'AUROC': [], 'AUPRC': [], 'F1 score': []}
+    if compute_drift:
+        res_perf['JS divergence'] = []
     heatmap_raw_list = []
 
     total = len(windows)
@@ -406,18 +421,21 @@ def build_dashboard_figure(windows, baseline_data, dates, model, final_feats, ta
     for i in range(total):
         try:
             w_df = windows[i]
-            X_infer = w_df if getattr(model, 'is_moe', False) else w_df[final_feats]
+            X_infer = w_df.drop(columns=[target_col], errors='ignore') if getattr(model, 'is_moe', False) else w_df[final_feats]
             mets, _ = get_metrics(model, X_infer, w_df[target_col])
-            avg_js, scores = compute_features_drift(baseline, w_df, final_feats)
 
             if mets:
                 res_perf['Date'].append(dates[i])
                 res_perf['AUROC'].append(mets['AUROC'])
                 res_perf['AUPRC'].append(mets['AUPRC'])
                 res_perf['F1 score'].append(mets['F1 score'])
-                res_perf['JS divergence'].append(avg_js)
-                heatmap_raw_list.append(scores)
-        except Exception:
+
+                if compute_drift:
+                    avg_js, scores = compute_features_drift(baseline, w_df, final_feats)
+                    res_perf['JS divergence'].append(avg_js)
+                    heatmap_raw_list.append(scores)
+        except Exception as e:
+            logger.error(f"[build_dashboard_figure] window {i} failed: {type(e).__name__}: {e}")
             continue
 
     if not res_perf['Date']:
@@ -429,14 +447,21 @@ def build_dashboard_figure(windows, baseline_data, dates, model, final_feats, ta
         row_vals = [rec.get(feat, 0.0) for rec in heatmap_raw_list]
         z_data.append(row_vals)
 
-    # Build combined subplot
-    fig = make_subplots(
-        rows=2, cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.03,
-        row_heights=[0.4, 0.6],
-        specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
-    )
+    # Build subplot layout
+    if compute_drift:
+        fig = make_subplots(
+            rows=2, cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.03,
+            row_heights=[0.4, 0.6],
+            specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
+        )
+    else:
+        # No drift: single row, no heatmap
+        fig = make_subplots(
+            rows=1, cols=1,
+            specs=[[{"secondary_y": False}]]
+        )
 
     df_res = pd.DataFrame(res_perf)
     colors = {
@@ -463,24 +488,27 @@ def build_dashboard_figure(windows, baseline_data, dates, model, final_feats, ta
                 secondary_y=is_secondary
             )
 
-    # Heatmap (bottom)
-    fig.add_trace(
-        go.Heatmap(
-            z=z_data,
-            x=df_res['Date'],
-            y=final_feats,
-            colorscale='RdBu_r',
-            zmin=0, zmax=1.0,
-            colorbar=dict(title="JS Div", y=0.3, len=0.6),
-            hovertemplate='<b>Feature</b>: %{y}<br><b>Date</b>: %{x}<br><b>JS</b>: %{z:.3f}<extra></extra>'
-        ),
-        row=2, col=1
-    )
+    # Heatmap (bottom) — only when drift data exists
+    if compute_drift and heatmap_raw_list:
+        fig.add_trace(
+            go.Heatmap(
+                z=z_data,
+                x=df_res['Date'],
+                y=final_feats,
+                colorscale='RdBu_r',
+                zmin=0, zmax=1.0,
+                colorbar=dict(title="JS Div", y=0.3, len=0.6),
+                hovertemplate='<b>Feature</b>: %{y}<br><b>Date</b>: %{x}<br><b>JS</b>: %{z:.3f}<extra></extra>'
+            ),
+            row=2, col=1
+        )
 
     # Layout
+    chart_title = "Model Performance Analysis" if not compute_drift else "Model Performance & Feature Drift Analysis"
+    chart_height = 450 if not compute_drift else 800
     fig.update_layout(
-        title="Model Performance & Feature Drift Analysis",
-        height=800,
+        title=chart_title,
+        height=chart_height,
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         paper_bgcolor='#fafafa',
@@ -488,16 +516,23 @@ def build_dashboard_figure(windows, baseline_data, dates, model, final_feats, ta
     )
 
     fig.update_yaxes(title_text="Performance", secondary_y=False, range=[0, 1.05], row=1, col=1)
-    fig.update_yaxes(title_text="Avg Drift (JS)", secondary_y=True, range=[0, 1.0], showgrid=False, row=1, col=1)
-    fig.update_yaxes(title="Features", automargin=True, row=2, col=1)
-
-    fig.update_xaxes(
-        title="Time",
-        rangeslider=dict(visible=True, thickness=0.05),
-        type="date",
-        row=2, col=1
-    )
-    fig.update_xaxes(showticklabels=False, row=1, col=1)
+    if compute_drift:
+        fig.update_yaxes(title_text="Avg Drift (JS)", secondary_y=True, range=[0, 1.0], showgrid=False, row=1, col=1)
+        fig.update_yaxes(title="Features", automargin=True, row=2, col=1)
+        fig.update_xaxes(
+            title="Time",
+            rangeslider=dict(visible=True, thickness=0.05),
+            type="date",
+            row=2, col=1
+        )
+        fig.update_xaxes(showticklabels=False, row=1, col=1)
+    else:
+        fig.update_xaxes(
+            title="Time",
+            rangeslider=dict(visible=True, thickness=0.05),
+            type="date",
+            row=1, col=1
+        )
 
     return fig, "Dashboard 更新成功。"
 
@@ -508,159 +543,469 @@ def build_dashboard_figure(windows, baseline_data, dates, model, final_feats, ta
 
 def compute_model_windows_metrics(windows, dates, model, final_feats, target_col, baseline=None):
     """
-    Compute AUROC, AUPRC, F1, JS divergence for each time window using the given model.
-    Returns a DataFrame with columns: Date, AUROC, AUPRC, F1 score, JS divergence.
+    Compute AUROC, AUPRC, F1, JS divergence, ECE, Entropy, PSI for each time window.
+    Returns a DataFrame with all metrics per window.
     """
     if baseline is None and windows:
         baseline = windows[0]
 
-    res = {'Date': [], 'AUROC': [], 'AUPRC': [], 'F1 score': [], 'JS divergence': []}
+    res = {
+        'Date': [], 'AUROC': [], 'AUPRC': [], 'F1 score': [],
+        'JS divergence': [], 'ECE': [], 'Entropy': [], 'PSI': [],
+    }
 
     for i, w_df in enumerate(windows):
         try:
-            X_infer = w_df if getattr(model, 'is_moe', False) else w_df[final_feats]
-            mets, _ = get_metrics(model, X_infer, w_df[target_col])
+            X_infer = w_df.drop(columns=[target_col], errors='ignore') if getattr(model, 'is_moe', False) else w_df[final_feats]
+            y = w_df[target_col]
+
+            # Drop NaN targets
+            valid_mask = ~y.isna()
+            y = y[valid_mask]
+            X_infer = X_infer.loc[valid_mask] if hasattr(X_infer, 'loc') else X_infer[valid_mask.values]
+
+            mets, _ = get_metrics(model, X_infer, y)
             avg_js, _ = compute_features_drift(baseline, w_df, final_feats)
+
             if mets:
+                # Core metrics
                 res['Date'].append(dates[i])
                 res['AUROC'].append(mets['AUROC'])
                 res['AUPRC'].append(mets['AUPRC'])
                 res['F1 score'].append(mets['F1 score'])
                 res['JS divergence'].append(avg_js)
-        except Exception:
+
+                # Early warning metrics
+                try:
+                    y_pred_proba = model.predict_proba(X_infer)
+                    res['ECE'].append(calculate_ece(y, y_pred_proba[:, 1]))
+                    res['Entropy'].append(calculate_average_entropy(y_pred_proba))
+                except Exception:
+                    res['ECE'].append(0.0)
+                    res['Entropy'].append(0.0)
+
+                # PSI (data stability)
+                try:
+                    res['PSI'].append(compute_avg_psi(baseline, w_df, final_feats) if baseline is not None else 0.0)
+                except Exception:
+                    res['PSI'].append(0.0)
+        except Exception as e:
+            logger.error(f"[compute_model_windows_metrics] window {i} failed: {type(e).__name__}: {e}")
             continue
 
     return pd.DataFrame(res) if res['Date'] else pd.DataFrame()
 
 
 # ==========================================
-# 6c. Comparison Figure: Dual-Model Overlay
+# 6c. Comparison Summary & Longevity Metrics
+# ==========================================
+
+def compute_comparison_summary(df_m1, df_m2, model_1_name='Model 1', model_2_name='Model 2'):
+    """
+    Compute summary statistics for two models' performance comparison.
+    Focused on model longevity: which model maintains better performance over time.
+
+    Returns:
+        dict with 'metrics_table' (list of dicts per metric),
+                   'overall_winner', 'longevity' (dict per model)
+    """
+    if df_m1.empty or df_m2.empty:
+        return None
+
+    metrics = ['AUROC', 'AUPRC', 'F1 score']
+    table = []
+
+    m1_wins = 0
+    m2_wins = 0
+
+    for metric in metrics:
+        if metric not in df_m1.columns or metric not in df_m2.columns:
+            continue
+
+        v1 = df_m1[metric].dropna()
+        v2 = df_m2[metric].dropna()
+
+        if len(v1) == 0 or len(v2) == 0:
+            continue
+
+        avg1 = v1.mean()
+        avg2 = v2.mean()
+        std1 = v1.std()
+        std2 = v2.std()
+        min1 = v1.min()
+        min2 = v2.min()
+
+        diff = avg1 - avg2
+        winner = model_1_name if diff > 0 else model_2_name if diff < 0 else '—'
+        if diff > 0:
+            m1_wins += 1
+        elif diff < 0:
+            m2_wins += 1
+
+        table.append({
+            'metric': metric,
+            'm1_avg': round(avg1, 4),
+            'm2_avg': round(avg2, 4),
+            'm1_std': round(std1, 4),
+            'm2_std': round(std2, 4),
+            'm1_min': round(min1, 4),
+            'm2_min': round(min2, 4),
+            'diff': round(diff, 4),
+            'winner': winner,
+        })
+
+    overall_winner = model_1_name if m1_wins > m2_wins else (
+        model_2_name if m2_wins > m1_wins else '持平'
+    )
+
+    return {
+        'metrics_table': table,
+        'overall_winner': overall_winner,
+        'm1_name': model_1_name,
+        'm2_name': model_2_name,
+        'm1_wins': m1_wins,
+        'm2_wins': m2_wins,
+    }
+
+
+def compute_longevity_metrics(df_m1, df_m2, model_1_name='Model 1', model_2_name='Model 2'):
+    """
+    Compute model longevity comparison metrics.
+    - consecutive_above: max consecutive windows where AUPRC >= threshold
+    - trend_slope: linear regression slope of AUPRC over time (negative = degrading)
+    - first_degradation: first window index where AUPRC drops below threshold
+
+    Returns:
+        dict with per-model longevity stats
+    """
+    AUPRC_THRESHOLD = 0.40  # Minimum acceptable AUPRC
+
+    def _compute_for_model(df, name):
+        if df.empty or 'AUPRC' not in df.columns:
+            return {'name': name, 'n_windows': 0, 'max_consecutive': 0,
+                    'trend_slope': 0.0, 'first_degradation': None,
+                    'windows_above': 0, 'pct_above': 0.0}
+
+        auprc = df['AUPRC'].values
+        n = len(auprc)
+
+        # Max consecutive windows above threshold
+        max_consec = 0
+        current_consec = 0
+        for v in auprc:
+            if v >= AUPRC_THRESHOLD:
+                current_consec += 1
+                max_consec = max(max_consec, current_consec)
+            else:
+                current_consec = 0
+
+        # Count total windows above threshold
+        windows_above = int(np.sum(auprc >= AUPRC_THRESHOLD))
+        pct_above = windows_above / n * 100 if n > 0 else 0.0
+
+        # Linear regression slope
+        if n >= 3:
+            x = np.arange(n)
+            slope = np.polyfit(x, auprc, 1)[0]
+        else:
+            slope = 0.0
+
+        # First degradation window
+        first_deg = None
+        for i, v in enumerate(auprc):
+            if v < AUPRC_THRESHOLD:
+                first_deg = i + 1  # 1-indexed
+                break
+
+        return {
+            'name': name,
+            'n_windows': n,
+            'max_consecutive': max_consec,
+            'trend_slope': round(slope, 6),
+            'first_degradation': first_deg,
+            'windows_above': windows_above,
+            'pct_above': round(pct_above, 1),
+        }
+
+    m1_stats = _compute_for_model(df_m1, model_1_name)
+    m2_stats = _compute_for_model(df_m2, model_2_name)
+
+    # Determine longevity winner
+    if m1_stats['max_consecutive'] > m2_stats['max_consecutive']:
+        longevity_winner = model_1_name
+    elif m2_stats['max_consecutive'] > m1_stats['max_consecutive']:
+        longevity_winner = model_2_name
+    else:
+        # Tiebreaker: better trend slope (less negative = more stable)
+        longevity_winner = model_1_name if m1_stats['trend_slope'] > m2_stats['trend_slope'] else model_2_name
+
+    return {
+        'm1': m1_stats,
+        'm2': m2_stats,
+        'longevity_winner': longevity_winner,
+        'auprc_threshold': AUPRC_THRESHOLD,
+    }
+
+
+# ==========================================
+# 6d. Comparison Figure: Dual-Model Overlay + Δ Performance
 # ==========================================
 
 def build_comparison_figure(windows, dates, model_1, model_2, final_feats, target_col,
-                            baseline=None, model_1_name='Model 1', model_2_name='Model 2'):
+                            baseline=None, model_1_name='Model 1', model_2_name='Model 2',
+                            auprc_threshold=0.40):
     """
-    Build a comparison Plotly figure: two models' AUPRC/AUROC/F1 overlaid on the same chart,
-    plus a heatmap of feature drift from the primary model.
+    Build comparison Plotly figures with white background.
+    Color scheme: M1 = orange-red family, M2 = blue-green family.
+    Each trace is individually toggleable (no legendgroup).
     """
     if not windows:
-        return go.Figure(), "無可用的時間窗口資料。"
+        return {'main': go.Figure(), 'warning': go.Figure()}, "無可用的時間窗口資料。"
 
-    # Compute per-window metrics for both models
     df_m1 = compute_model_windows_metrics(windows, dates, model_1, final_feats, target_col, baseline)
     df_m2 = compute_model_windows_metrics(windows, dates, model_2, final_feats, target_col, baseline)
 
     if df_m1.empty and df_m2.empty:
-        return go.Figure(), "兩個模型都無法計算有效指標。"
+        return {'main': go.Figure(), 'warning': go.Figure()}, "兩個模型都無法計算有效指標。"
 
-    # Build subplot: 2 rows (performance + heatmap)
-    fig = make_subplots(
-        rows=2, cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.03,
-        row_heights=[0.5, 0.5],
-        specs=[[{"secondary_y": True}], [{"secondary_y": False}]],
+    # =============================================
+    # Color Families — same model = same color family
+    # M1 (e.g. EBM) = Orange-Red | M2 (e.g. MoE) = Blue-Green
+    # =============================================
+    M1_COLORS = {
+        'AUPRC': '#E65100',    # deep orange
+        'AUROC': '#FF8F00',    # amber
+        'F1 score': '#D84315', # red-orange
+    }
+    M2_COLORS = {
+        'AUPRC': '#00897B',    # teal
+        'AUROC': '#0277BD',    # blue
+        'F1 score': '#00695C', # dark teal
+    }
+
+    # =============================================
+    # CHART 1: Main overlay (Survival + Delta)
+    # =============================================
+    fig_main = make_subplots(
+        rows=1, cols=1,
+        specs=[[{"secondary_y": True}]],
     )
 
-    # Color scheme
-    m1_colors = {'AUPRC': '#00CC96', 'AUROC': '#636EFA', 'F1 score': '#EF553B'}
-    m2_colors = {'AUPRC': '#FF6692', 'AUROC': '#FFA15A', 'F1 score': '#B6E880'}
-
-    # Model 1 traces (solid lines)
-    if not df_m1.empty:
-        for metric in ['AUPRC', 'AUROC', 'F1 score']:
-            if metric in df_m1.columns:
-                fig.add_trace(
-                    go.Scatter(
-                        x=df_m1['Date'], y=df_m1[metric],
-                        name=f'{model_1_name} {metric}',
-                        mode='lines+markers',
-                        marker=dict(color=m1_colors.get(metric, 'grey'), size=6),
-                        line=dict(width=2, dash='solid'),
-                        legendgroup=model_1_name,
-                    ),
-                    row=1, col=1, secondary_y=False
-                )
-
-        # JS divergence on secondary axis
-        if 'JS divergence' in df_m1.columns:
-            fig.add_trace(
+    # --- M1 traces (solid lines) ---
+    for metric in ['AUPRC', 'AUROC', 'F1 score']:
+        if not df_m1.empty and metric in df_m1.columns:
+            fig_main.add_trace(
                 go.Scatter(
-                    x=df_m1['Date'], y=df_m1['JS divergence'],
-                    name=f'{model_1_name} JS Div',
-                    mode='lines',
-                    line=dict(width=1.5, dash='dot', color='#AB63FA'),
-                    legendgroup=model_1_name,
+                    x=df_m1['Date'], y=df_m1[metric],
+                    name=f'{model_1_name} {metric}',
+                    mode='lines+markers',
+                    marker=dict(color=M1_COLORS[metric], size=6),
+                    line=dict(width=2.5, dash='solid'),
+                    visible=True if metric == 'AUPRC' else 'legendonly',
                 ),
-                row=1, col=1, secondary_y=True
+                secondary_y=False,
             )
 
-    # Model 2 traces (dashed lines)
-    if not df_m2.empty:
-        for metric in ['AUPRC', 'AUROC', 'F1 score']:
-            if metric in df_m2.columns:
-                fig.add_trace(
-                    go.Scatter(
-                        x=df_m2['Date'], y=df_m2[metric],
-                        name=f'{model_2_name} {metric}',
-                        mode='lines+markers',
-                        marker=dict(color=m2_colors.get(metric, 'grey'), size=6, symbol='diamond'),
-                        line=dict(width=2, dash='dash'),
-                        legendgroup=model_2_name,
-                    ),
-                    row=1, col=1, secondary_y=False
-                )
+    # --- M2 traces (dashed lines, diamond markers) ---
+    for metric in ['AUPRC', 'AUROC', 'F1 score']:
+        if not df_m2.empty and metric in df_m2.columns:
+            fig_main.add_trace(
+                go.Scatter(
+                    x=df_m2['Date'], y=df_m2[metric],
+                    name=f'{model_2_name} {metric}',
+                    mode='lines+markers',
+                    marker=dict(color=M2_COLORS[metric], size=6, symbol='diamond'),
+                    line=dict(width=2.5, dash='dash'),
+                    visible=True if metric == 'AUPRC' else 'legendonly',
+                ),
+                secondary_y=False,
+            )
 
-    # Heatmap from primary model's data
-    if baseline is None and windows:
-        baseline = windows[0]
-    heatmap_raw = []
-    for w_df in windows:
-        try:
-            _, scores = compute_features_drift(baseline, w_df, final_feats)
-            heatmap_raw.append(scores)
-        except Exception:
-            heatmap_raw.append({f: 0.0 for f in final_feats})
+    # Threshold line
+    all_dates = df_m1['Date'].tolist() if not df_m1.empty else (df_m2['Date'].tolist() if not df_m2.empty else [])
+    if all_dates:
+        fig_main.add_trace(
+            go.Scatter(
+                x=all_dates,
+                y=[auprc_threshold] * len(all_dates),
+                name=f'AUPRC 閥值 ({auprc_threshold})',
+                mode='lines',
+                line=dict(width=2, dash='dot', color='#B71C1C'),
+            ),
+            secondary_y=False,
+        )
 
-    z_data = []
-    for feat in final_feats:
-        z_data.append([rec.get(feat, 0.0) for rec in heatmap_raw])
+    # --- Delta Performance bars ---
+    if not df_m1.empty and not df_m2.empty:
+        merged = pd.merge(
+            df_m1[['Date', 'AUPRC']],
+            df_m2[['Date', 'AUPRC']],
+            on='Date', suffixes=('_m1', '_m2'),
+            how='inner'
+        )
+        if not merged.empty:
+            delta = merged['AUPRC_m1'] - merged['AUPRC_m2']
+            bar_colors = ['#2ECC71' if d >= 0 else '#E74C3C' for d in delta]
+            fig_main.add_trace(
+                go.Bar(
+                    x=merged['Date'], y=delta,
+                    name=f'Δ AUPRC ({model_1_name} − {model_2_name})',
+                    marker_color=bar_colors,
+                    opacity=0.45,
+                ),
+                secondary_y=True,
+            )
 
-    fig.add_trace(
-        go.Heatmap(
-            z=z_data,
-            x=[d for d in dates[:len(heatmap_raw)]],
-            y=final_feats,
-            colorscale='RdBu_r',
-            zmin=0, zmax=1.0,
-            colorbar=dict(title="JS Div", y=0.25, len=0.5),
-            showlegend=False,
+    # --- JS Divergence (if baseline exists) ---
+    if not df_m1.empty and 'JS divergence' in df_m1.columns:
+        fig_main.add_trace(
+            go.Scatter(
+                x=df_m1['Date'], y=df_m1['JS divergence'],
+                name='JS Divergence',
+                mode='lines',
+                line=dict(width=1.5, dash='dot', color='#7B1FA2'),
+                visible='legendonly',
+            ),
+            secondary_y=True,
+        )
+
+    # Layout — white background
+    fig_main.update_layout(
+        title=dict(
+            text=f"⚔️ {model_1_name} vs {model_2_name} — 壽命軌跡 × Δ Performance",
+            font=dict(size=15, color='#333'),
         ),
-        row=2, col=1
-    )
-
-    # Layout
-    fig.update_layout(
-        title=f"Model Comparison: {model_1_name} vs {model_2_name}",
-        height=850,
+        height=500,
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        paper_bgcolor='#fafafa',
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+            font=dict(size=11, color='#333'),
+        ),
+        paper_bgcolor='#ffffff',
         plot_bgcolor='#ffffff',
+        bargap=0.3,
     )
-
-    fig.update_yaxes(title_text="Performance", secondary_y=False, range=[0, 1.05], row=1, col=1)
-    fig.update_yaxes(title_text="Avg Drift (JS)", secondary_y=True, range=[0, 1.0], showgrid=False, row=1, col=1)
-    fig.update_yaxes(title="Features", automargin=True, row=2, col=1)
-    fig.update_xaxes(
+    fig_main.update_yaxes(
+        title_text="Performance",
+        secondary_y=False, range=[0, 1.05],
+        gridcolor='rgba(0,0,0,0.08)',
+        zerolinecolor='rgba(0,0,0,0.1)',
+        tickfont=dict(color='#555'),
+    )
+    fig_main.update_yaxes(
+        title_text="Δ AUPRC / Drift",
+        secondary_y=True,
+        showgrid=False,
+        zeroline=True, zerolinecolor='rgba(0,0,0,0.15)',
+        tickfont=dict(color='#555'),
+    )
+    fig_main.update_xaxes(
         title="Time",
-        rangeslider=dict(visible=True, thickness=0.05),
         type="date",
-        row=2, col=1
+        rangeslider=dict(visible=True, thickness=0.05),
+        gridcolor='rgba(0,0,0,0.08)',
+        tickfont=dict(color='#555'),
     )
-    fig.update_xaxes(showticklabels=False, row=1, col=1)
 
-    return fig, "比較圖表產生成功。"
+    # =============================================
+    # CHART 2: Early Warning (ECE + Entropy)
+    # Same color families: M1=orange-red, M2=blue-green
+    # Both ECE and Entropy are "lower is better"
+    # =============================================
+    fig_warning = go.Figure()
+
+    # M1 colors (orange-red family)
+    m1_entropy_color = '#EF6C00'  # orange
+    m1_ece_color = '#BF360C'      # dark red-orange
+
+    # M2 colors (blue-green family)
+    m2_entropy_color = '#00838F'  # teal-cyan
+    m2_ece_color = '#01579B'      # dark blue
+
+    # Entropy traces
+    if not df_m1.empty and 'Entropy' in df_m1.columns:
+        fig_warning.add_trace(
+            go.Scatter(
+                x=df_m1['Date'], y=df_m1['Entropy'],
+                name=f'{model_1_name} Entropy',
+                mode='lines+markers',
+                marker=dict(color=m1_entropy_color, size=7),
+                line=dict(width=2.5, dash='solid'),
+            ),
+        )
+    if not df_m2.empty and 'Entropy' in df_m2.columns:
+        fig_warning.add_trace(
+            go.Scatter(
+                x=df_m2['Date'], y=df_m2['Entropy'],
+                name=f'{model_2_name} Entropy',
+                mode='lines+markers',
+                marker=dict(color=m2_entropy_color, size=7, symbol='diamond'),
+                line=dict(width=2.5, dash='dash'),
+            ),
+        )
+
+    # ECE traces
+    if not df_m1.empty and 'ECE' in df_m1.columns:
+        fig_warning.add_trace(
+            go.Scatter(
+                x=df_m1['Date'], y=df_m1['ECE'],
+                name=f'{model_1_name} ECE',
+                mode='lines+markers',
+                marker=dict(color=m1_ece_color, size=5),
+                line=dict(width=1.5, dash='dot'),
+            ),
+        )
+    if not df_m2.empty and 'ECE' in df_m2.columns:
+        fig_warning.add_trace(
+            go.Scatter(
+                x=df_m2['Date'], y=df_m2['ECE'],
+                name=f'{model_2_name} ECE',
+                mode='lines+markers',
+                marker=dict(color=m2_ece_color, size=5, symbol='diamond'),
+                line=dict(width=1.5, dash='dot'),
+            ),
+        )
+
+    fig_warning.update_layout(
+        title=dict(
+            text="🚨 模型信心預警 — Entropy + ECE（兩者皆越低越好 ↓）",
+            font=dict(size=15, color='#333'),
+        ),
+        height=400,
+        hovermode="x unified",
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+            font=dict(size=11, color='#333'),
+        ),
+        paper_bgcolor='#ffffff',
+        plot_bgcolor='#ffffff',
+        yaxis=dict(
+            title="Entropy / ECE（↓ 越低越好）",
+            gridcolor='rgba(0,0,0,0.08)',
+            tickfont=dict(color='#555'),
+        ),
+        xaxis=dict(
+            title="Time",
+            type="date",
+            rangeslider=dict(visible=True, thickness=0.05),
+            gridcolor='rgba(0,0,0,0.08)',
+            tickfont=dict(color='#555'),
+        ),
+        # Annotation explaining interpretation
+        annotations=[
+            dict(
+                text="ECE = 校準誤差（預測信心 vs 實際準確度的差距）<br>Entropy = 預測不確定性（模型對結果的猶豫程度）<br>兩者上升 = 模型正在退化的早期訊號",
+                xref="paper", yref="paper",
+                x=0.01, y=-0.22,
+                showarrow=False,
+                font=dict(size=10, color='#888'),
+                align="left",
+            )
+        ],
+    )
+
+    return {'main': fig_main, 'warning': fig_warning}, "比較圖表產生成功。"
+
 
 
 # ==========================================
@@ -791,7 +1136,7 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
 
     for i, w_df in enumerate(windows):
         try:
-            X_infer = w_df if getattr(model, 'is_moe', False) else w_df[final_feats]
+            X_infer = w_df.drop(columns=[target_col], errors='ignore') if getattr(model, 'is_moe', False) else w_df[final_feats]
             y = w_df[target_col]
 
             # Drop NaN targets
@@ -1201,7 +1546,7 @@ def generate_monthly_report(windows, baseline_data, dates, model,
 
     for w_df in analysis_windows:
         try:
-            X_infer = w_df if getattr(model, 'is_moe', False) else w_df[final_feats]
+            X_infer = w_df.drop(columns=[target_col], errors='ignore') if getattr(model, 'is_moe', False) else w_df[final_feats]
             y = w_df[target_col]
 
             # Drop NaN targets
