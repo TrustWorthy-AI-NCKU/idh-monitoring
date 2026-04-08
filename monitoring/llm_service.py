@@ -8,12 +8,14 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-def generate_llm_summary(report):
+def generate_llm_summary(report, override_prompt=None):
     """
-    根據 generate_monthly_report() 的結果，呼叫 LLM 生成 80 字以內的摘要。
+    根據 generate_monthly_report() 的結果，呼叫 LLM 生成摘要。
 
     Args:
         report: generate_monthly_report() 回傳的 dict。
+        override_prompt: 如果提供，使用這個 prompt 取代 report['llm_prompt']。
+                          用於雙窗格合併 prompt 的場景。
 
     Returns:
         str: LLM 生成的摘要文字，若失敗則回傳 fallback 文字。
@@ -23,7 +25,7 @@ def generate_llm_summary(report):
         logger.info("[LLM] Ollama is disabled in settings.")
         return _fallback_summary(report)
 
-    prompt = report.get('llm_prompt', '')
+    prompt = override_prompt or report.get('llm_prompt', '')
     if not prompt:
         return _fallback_summary(report)
 
@@ -53,12 +55,12 @@ def generate_llm_summary(report):
         result = re.sub(r'^- ', '・', result, flags=re.MULTILINE)
         result = result.strip()
 
-        # Limit length (prompt asks for ≤250 chars, add buffer)
-        if len(result) > 350:
-            # Cut at last complete sentence within limit
-            trimmed = result[:350]
-            last_period = max(trimmed.rfind('。'), trimmed.rfind('。'), trimmed.rfind('\n'))
-            if last_period > 200:
+        # Limit length (dual prompt: 600 chars; single: 350)
+        max_len = 600 if override_prompt else 350
+        if len(result) > max_len:
+            trimmed = result[:max_len]
+            last_period = max(trimmed.rfind('。'), trimmed.rfind('\n'))
+            if last_period > max_len * 0.6:
                 result = trimmed[:last_period + 1]
             else:
                 result = trimmed + '...'
@@ -75,14 +77,49 @@ def generate_llm_summary(report):
 
 
 def _fallback_summary(report):
-    """當 LLM 不可用時，產生模板式 fallback 摘要。"""
+    """當 LLM 不可用時，產生結構化 fallback 摘要（包含雙窗格標記）。"""
     if not report.get('safety_gates'):
         return '資料不足，無法生成分析摘要。'
 
     failed = [g for g in report['safety_gates'] if not g['passed']]
+    passed = [g for g in report['safety_gates'] if g['passed']]
 
+    # Build aging status
+    aging_indicators = report.get('aging_indicators', [])
+    aging_lines = []
+    for ai in aging_indicators:
+        status_map = {'good': '正常', 'warning': '需注意', 'critical': '異常'}
+        aging_lines.append(f"・{ai['label']}（{ai['metric']}）= {ai['value']}，狀態{status_map.get(ai['status'], '未知')}")
+
+    # Use tagged format for both 90-day and 30-day (fallback uses same text for both)
     if not failed:
-        return '本期所有安全閘門指標均達標，模型運作正常，建議持續定期監測。'
+        status_text = (
+            f"・所有安全閃門均達標（{len(passed)}/{len(passed)} 通過）\n"
+            f"・整體預測品質維持在可接受範圍\n"
+        )
+        aging_text = ""
+        if aging_lines:
+            aging_text = "\n".join(aging_lines) + "\n"
+        cause_text = "・模型與目前資料分布仍相容\n"
+        action_text = "・建議維持定期監控頻率\n・可視資料量增長考慮重新訓練\n"
+    else:
+        failed_names = '、'.join(g['label'] for g in failed)
+        status_text = (
+            f"・{failed_names} 未達安全門檻\n"
+            f"・{len(failed)}/{len(failed) + len(passed)} 項指標需要關注\n"
+        )
+        aging_text = ""
+        if aging_lines:
+            aging_text = "\n".join(aging_lines) + "\n"
+        cause_text = "・資料分布可能已偏離訓練時的特徵\n・模型校準度可能已隨時間下降\n"
+        action_text = "・檢視近期資料品質是否有變化\n・評估是否需要以最新資料重新訓練模型\n"
 
-    failed_names = '、'.join(g['label'] for g in failed)
-    return f'本期{failed_names}未達安全門檻，建議檢視近期資料品質並評估是否需要重新訓練模型。'
+    summary = (
+        f"[90天-現況] 模型本期表現\n{status_text}"
+        f"\n[30天-現況] 模型本期表現\n{status_text}"
+        f"\n[90天-老化] 老化指標檢視\n{aging_text}"
+        f"\n[30天-老化] 老化指標檢視\n{aging_text}"
+        f"\n[原因] 可能因素\n{cause_text}"
+        f"\n[建議] 行動方案\n{action_text}"
+    )
+    return summary.strip()

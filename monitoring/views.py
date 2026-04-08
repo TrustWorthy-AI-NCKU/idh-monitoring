@@ -15,6 +15,8 @@ from .services import (
     load_and_process, build_dashboard_figure, build_comparison_figure,
     generate_alerts, generate_monthly_report,
     compute_model_windows_metrics, compute_comparison_summary, compute_longevity_metrics,
+    sliding_windows_exact, compute_adaptive_thresholds,
+    compute_single_model_longevity, build_combined_llm_prompt,
 )
 from .llm_service import generate_llm_summary
 from .moe_service import MoEModel, create_moe_model
@@ -187,6 +189,7 @@ def dashboard_view(request):
                         'trend_window': trend_window,
                         'alert_mode': request.POST.get('alert_mode', 'strict'),
                         'model_type': single_model_type,
+                        'df_clean': result.get('df_clean'),
                     }
                     cache.set(CACHE_KEY, cache_data, CACHE_TIMEOUT)
 
@@ -275,6 +278,7 @@ def dashboard_view(request):
                     'target_col': result['target_col'],
                     'trend_window': trend_window,
                     'alert_mode': request.POST.get('alert_mode', 'strict'),
+                    'df_clean': result.get('df_clean'),
                 }
 
                 # --- Model 2 (comparison) ---
@@ -378,11 +382,15 @@ def dashboard_view(request):
         })
 
     # Build figure JSON and alerts if data is available
-    figure_json = None
+    figure_json_a = None   # Config A: 90-day windows
+    figure_json_b = None   # Config B: 30-day windows
     figure_error = None
     alerts = []
     analysis_info = {}
-    monthly_report = None
+    monthly_report_a = None
+    monthly_report_b = None
+    longevity_a = None
+    longevity_b = None
     llm_summary = None
     moe_metrics = None
     comparison_info = None
@@ -395,32 +403,126 @@ def dashboard_view(request):
     if has_data:
         cached_data = cache.get(CACHE_KEY)
         if cached_data:
-            # --- Primary Model Figure ---
+            model = cached_data['model']
+            feats = cached_data['features']
+            target = cached_data['target_col']
+            baseline = cached_data['baseline']
+            tw = cached_data.get('trend_window', 5)
+            model_ver = uploaded_files.get('model_file', '未知')
+            has_baseline = baseline is not None
+            df_clean = cached_data.get('df_clean')
+
+            # =============================================
+            # Config A: 90-day window / 30-day stride
+            # =============================================
+            windows_a = cached_data['windows']
+            dates_a = cached_data['dates']
+
+            # Config A chart
             try:
-                fig, msg = build_dashboard_figure(
-                    windows=cached_data['windows'],
-                    baseline_data=cached_data['baseline'],
-                    dates=cached_data['dates'],
-                    model=cached_data['model'],
-                    final_feats=cached_data['features'],
-                    target_col=cached_data['target_col'],
+                fig_a, _ = build_dashboard_figure(
+                    windows=windows_a, baseline_data=baseline,
+                    dates=dates_a, model=model,
+                    final_feats=feats, target_col=target,
                     metrics_list=['AUPRC', 'AUROC', 'F1 score', 'JS divergence'],
-                    has_real_baseline=cached_data['baseline'] is not None,
+                    has_real_baseline=has_baseline,
                 )
-                figure_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+                figure_json_a = json.dumps(fig_a, cls=plotly.utils.PlotlyJSONEncoder)
             except Exception as e:
                 figure_error = str(e)
 
-            # Generate alerts
+            # Config A report
+            try:
+                monthly_report_a = generate_monthly_report(
+                    windows=windows_a, baseline_data=baseline,
+                    dates=dates_a, model=model,
+                    final_feats=feats, target_col=target,
+                    model_version=model_ver, trend_window=tw,
+                )
+            except Exception as e:
+                logger.error(f"[dashboard] Config A report failed: {e}")
+
+            # =============================================
+            # Config B: 30-day window / 15-day stride
+            # =============================================
+            windows_b = []
+            dates_b = []
+            if df_clean is not None:
+                try:
+                    windows_b, dates_b = sliding_windows_exact(
+                        df_clean, window_size_days=30, stride_days=15
+                    )
+                except Exception as e:
+                    logger.error(f"[dashboard] Config B sliding_windows failed: {e}")
+
+            if windows_b:
+                # Config B chart
+                try:
+                    fig_b, _ = build_dashboard_figure(
+                        windows=windows_b, baseline_data=baseline,
+                        dates=dates_b, model=model,
+                        final_feats=feats, target_col=target,
+                        metrics_list=['AUPRC', 'AUROC', 'F1 score', 'JS divergence'],
+                        has_real_baseline=has_baseline,
+                    )
+                    figure_json_b = json.dumps(fig_b, cls=plotly.utils.PlotlyJSONEncoder)
+                except Exception as e:
+                    logger.error(f"[dashboard] Config B chart failed: {e}")
+
+                # Config B report
+                try:
+                    monthly_report_b = generate_monthly_report(
+                        windows=windows_b, baseline_data=baseline,
+                        dates=dates_b, model=model,
+                        final_feats=feats, target_col=target,
+                        model_version=model_ver, trend_window=tw,
+                    )
+                except Exception as e:
+                    logger.error(f"[dashboard] Config B report failed: {e}")
+
+            # =============================================
+            # Adaptive Thresholds & Longevity
+            # =============================================
+            adaptive_thresh = None
+            if monthly_report_a and not monthly_report_a.get('basic_info', {}).get('error'):
+                try:
+                    adaptive_thresh = compute_adaptive_thresholds(monthly_report_a)
+                except Exception as e:
+                    logger.error(f"[dashboard] adaptive thresholds failed: {e}")
+
+            # Longevity A (90-day)
+            if windows_a and len(windows_a) >= 2:
+                try:
+                    longevity_a = compute_single_model_longevity(
+                        windows=windows_a, baseline_data=baseline,
+                        dates=dates_a, model=model,
+                        final_feats=feats, target_col=target,
+                        adaptive_thresholds=adaptive_thresh,
+                    )
+                except Exception as e:
+                    logger.error(f"[dashboard] longevity A failed: {e}")
+
+            # Longevity B (30-day)
+            if windows_b and len(windows_b) >= 2:
+                try:
+                    longevity_b = compute_single_model_longevity(
+                        windows=windows_b, baseline_data=baseline,
+                        dates=dates_b, model=model,
+                        final_feats=feats, target_col=target,
+                        adaptive_thresholds=adaptive_thresh,
+                    )
+                except Exception as e:
+                    logger.error(f"[dashboard] longevity B failed: {e}")
+
+            # =============================================
+            # Alerts (use Config A windows)
+            # =============================================
             try:
                 alerts, analysis_info = generate_alerts(
-                    windows=cached_data['windows'],
-                    baseline_data=cached_data['baseline'],
-                    dates=cached_data['dates'],
-                    model=cached_data['model'],
-                    final_feats=cached_data['features'],
-                    target_col=cached_data['target_col'],
-                    trend_window=cached_data.get('trend_window', 5),
+                    windows=windows_a, baseline_data=baseline,
+                    dates=dates_a, model=model,
+                    final_feats=feats, target_col=target,
+                    trend_window=tw,
                     alert_mode=cached_data.get('alert_mode', 'strict'),
                 )
             except Exception as e:
@@ -428,23 +530,29 @@ def dashboard_view(request):
                            'detail': str(e), 'metric': None, 'value': None}]
                 analysis_info = {}
 
-            # Generate monthly report
+            # =============================================
+            # LLM Summary (single call, combined prompt)
+            # =============================================
             try:
-                monthly_report = generate_monthly_report(
-                    windows=cached_data['windows'],
-                    baseline_data=cached_data['baseline'],
-                    dates=cached_data['dates'],
-                    model=cached_data['model'],
-                    final_feats=cached_data['features'],
-                    target_col=cached_data['target_col'],
-                    model_version=uploaded_files.get('model_file', '未知'),
-                    trend_window=cached_data.get('trend_window', 5),
-                )
-                llm_summary = generate_llm_summary(monthly_report)
+                if monthly_report_a and monthly_report_b:
+                    combined_prompt = build_combined_llm_prompt(
+                        monthly_report_a, monthly_report_b,
+                        label_a='90天窗格（季度觀察）',
+                        label_b='30天窗格（月度觀察）',
+                    )
+                    llm_summary = generate_llm_summary(
+                        monthly_report_a, override_prompt=combined_prompt
+                    )
+                elif monthly_report_a:
+                    llm_summary = generate_llm_summary(monthly_report_a)
+                else:
+                    llm_summary = None
             except Exception as e:
                 llm_summary = f"報告生成失敗（{str(e)}）"
 
-            # --- Comparison Model Figure ---
+            # =============================================
+            # Comparison Model (unchanged logic)
+            # =============================================
             comparison_info = cached_data.get('comparison_info')
             m2_model = cached_data.get('comparison_model_wrapped') or cached_data.get('comparison_model')
             if m2_model:
@@ -452,46 +560,32 @@ def dashboard_view(request):
                     m1_name = uploaded_files.get('model_file', 'Model 1')
                     m2_name = comparison_info.get('type', 'Model 2') if comparison_info else 'Model 2'
                     auprc_threshold = float(uploaded_files.get('auprc_threshold', 0.40))
-                    comp_figs, comp_msg = build_comparison_figure(
-                        windows=cached_data['windows'],
-                        dates=cached_data['dates'],
-                        model_1=cached_data['model'],
-                        model_2=m2_model,
-                        final_feats=cached_data['features'],
-                        target_col=cached_data['target_col'],
-                        baseline=cached_data['baseline'],
-                        model_1_name=m1_name,
-                        model_2_name=m2_name,
+                    comp_figs, _ = build_comparison_figure(
+                        windows=windows_a, dates=dates_a,
+                        model_1=model, model_2=m2_model,
+                        final_feats=feats, target_col=target,
+                        baseline=baseline,
+                        model_1_name=m1_name, model_2_name=m2_name,
                         auprc_threshold=auprc_threshold,
                     )
                     comparison_figure_json = json.dumps(comp_figs['main'], cls=plotly.utils.PlotlyJSONEncoder)
                     comparison_warning_json = json.dumps(comp_figs['warning'], cls=plotly.utils.PlotlyJSONEncoder)
 
-                    # Compute comparison summary & longevity metrics
                     df_m1 = compute_model_windows_metrics(
-                        cached_data['windows'], cached_data['dates'],
-                        cached_data['model'], cached_data['features'],
-                        cached_data['target_col'], cached_data['baseline']
+                        windows_a, dates_a, model, feats, target, baseline
                     )
                     df_m2 = compute_model_windows_metrics(
-                        cached_data['windows'], cached_data['dates'],
-                        m2_model, cached_data['features'],
-                        cached_data['target_col'], cached_data['baseline']
+                        windows_a, dates_a, m2_model, feats, target, baseline
                     )
                     comparison_summary = compute_comparison_summary(df_m1, df_m2, m1_name, m2_name)
                     longevity_metrics = compute_longevity_metrics(df_m1, df_m2, m1_name, m2_name)
 
-                    # Generate M2 monthly report
                     try:
                         monthly_report_m2 = generate_monthly_report(
-                            windows=cached_data['windows'],
-                            baseline_data=cached_data['baseline'],
-                            dates=cached_data['dates'],
-                            model=m2_model,
-                            final_feats=cached_data['features'],
-                            target_col=cached_data['target_col'],
-                            model_version=m2_name,
-                            trend_window=cached_data.get('trend_window', 5),
+                            windows=windows_a, baseline_data=baseline,
+                            dates=dates_a, model=m2_model,
+                            final_feats=feats, target_col=target,
+                            model_version=m2_name, trend_window=tw,
                         )
                     except Exception as e:
                         logger.error(f"[dashboard] M2 monthly report failed: {e}")
@@ -504,13 +598,22 @@ def dashboard_view(request):
         'form': form,
         'has_data': has_data,
         'uploaded_files': uploaded_files,
-        'figure_json': figure_json,
+        # Dual window config
+        'figure_json_a': figure_json_a,
+        'figure_json_b': figure_json_b,
+        'figure_json': figure_json_a,     # backward compat
         'figure_error': figure_error,
         'alerts': alerts,
         'analysis_info': analysis_info,
-        'monthly_report': monthly_report,
-        'monthly_report_m2': monthly_report_m2,
+        'monthly_report': monthly_report_a,
+        'monthly_report_a': monthly_report_a,
+        'monthly_report_b': monthly_report_b,
+        'longevity_a': longevity_a,
+        'longevity_b': longevity_b,
+        # LLM (shared)
         'llm_summary': llm_summary,
+        # Comparison (unchanged)
+        'monthly_report_m2': monthly_report_m2,
         'moe_metrics': moe_metrics,
         'comparison_info': comparison_info,
         'comparison_figure_json': comparison_figure_json,

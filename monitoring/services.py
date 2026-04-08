@@ -378,6 +378,7 @@ def load_and_process(data_path, model_path, feature_str, target_col,
             'model': model,
             'features': final_feats,
             'target_col': target_col,
+            'df_clean': df_clean,  # For re-slicing with different window configs
         })
         return result
 
@@ -1496,10 +1497,10 @@ def generate_alerts(windows, baseline_data, dates, model, final_feats, target_co
 # ==========================================
 
 SAFETY_GATES = {
-    'Sensitivity': {'min': 0.70, 'label': 'Sensitivity'},
-    'FPR':         {'max': 0.35, 'label': 'FPR'},
-    'AUPRC':       {'min': 0.40, 'label': 'AUPRC'},
-    'AUROC':       {'min': 0.70, 'label': 'AUROC'},
+    'Sensitivity': {'min': 0.70, 'label': 'Sensitivity', 'aging_aspect': '臨床敏感度', 'aging_desc': '偵測正例的能力'},
+    'FPR':         {'max': 0.35, 'label': 'FPR', 'aging_aspect': '誤報控制', 'aging_desc': '假陽性控制能力'},
+    'AUPRC':       {'min': 0.40, 'label': 'AUPRC', 'aging_aspect': '模型表現', 'aging_desc': '整體預測效能'},
+    'AUROC':       {'min': 0.70, 'label': 'AUROC', 'aging_aspect': '分類能力', 'aging_desc': '區分正負例能力'},
 }
 
 
@@ -1661,6 +1662,8 @@ def generate_monthly_report(windows, baseline_data, dates, model,
             'gauge_pct': round(gauge_pct, 1),
             'threshold_pct': round(threshold_pct, 1),
             'is_lower_better': 'max' in gate,
+            'aging_aspect': gate.get('aging_aspect', ''),
+            'aging_desc': gate.get('aging_desc', ''),
         })
 
     # --- Additional Metrics ---
@@ -1668,43 +1671,439 @@ def generate_monthly_report(windows, baseline_data, dates, model,
     ece_val = calculate_ece(y_true, y_prob)
     brier_val = calculate_brier(y_true, y_prob)
 
+    # JS Divergence for aging context
+    if baseline_data is not None:
+        baseline = baseline_data.copy()
+    elif windows:
+        baseline = windows[0]
+    else:
+        baseline = None
+    latest_window = analysis_windows[-1] if analysis_windows else None
+    if baseline is not None and latest_window is not None:
+        avg_js, _ = compute_features_drift(baseline, latest_window, final_feats)
+    else:
+        avg_js = 0.0
+
     report['additional'] = {
         'F1': round(f1, 4),
         'ECE': round(ece_val, 4),
         'Brier': round(brier_val, 4),
+        'JS_divergence': round(avg_js, 4),
     }
 
-    # --- Build LLM prompt ---
+    # --- Aging Indicators (structured for display) ---
+    report['aging_indicators'] = [
+        {
+            'icon': '📊',
+            'label': '資料飄移',
+            'metric': 'JS Divergence',
+            'value': round(avg_js, 4),
+            'status': 'critical' if avg_js >= 0.25 else ('warning' if avg_js >= 0.10 else 'good'),
+            'desc': '輸入資料與訓練基準的分布差異。越高表示資料環境變化越大。',
+        },
+        {
+            'icon': '🎯',
+            'label': '預測信心',
+            'metric': 'ECE',
+            'value': round(ece_val, 4),
+            'status': 'critical' if ece_val >= 0.25 else ('warning' if ece_val >= 0.15 else 'good'),
+            'desc': '模型預測機率與實際結果的校準誤差。越高表示模型信心越不可靠。',
+        },
+        {
+            'icon': '📈',
+            'label': '模型表現',
+            'metric': 'AUPRC',
+            'value': round(auprc, 4),
+            'status': 'critical' if auprc < 0.30 else ('warning' if auprc < 0.45 else 'good'),
+            'desc': '在類別不平衡場景下的整體預測品質。越高代表表現越好。',
+        },
+    ]
+
+    # --- Build LLM prompt (structured bullet-point format) ---
     info = report['basic_info']
     gates_lines = []
     for g in report['safety_gates']:
-        status = '[達標]' if g['passed'] else '[未達標]'
+        status = '達標' if g['passed'] else '未達標'
         gates_lines.append(
-            f"{g['metric']}: {g['value']} (門檻{g['threshold']}) {status}"
+            f"  {g['metric']}（{g.get('aging_aspect', '')}）: {g['value']} (門檻{g['threshold']}) [{status}]"
+        )
+
+    aging_lines = []
+    for ai in report.get('aging_indicators', []):
+        status_map = {'good': '正常', 'warning': '注意', 'critical': '警告'}
+        aging_lines.append(
+            f"  {ai['label']}（{ai['metric']}）= {ai['value']} [{status_map.get(ai['status'], '未知')}]"
         )
 
     report['llm_prompt'] = (
-        f"你是醫療AI模型監控專家。根據以下IDH（血液透析中低血壓）預測模型的監控指標，寫一段分析報告。\n"
-        f"嚴格要求：\n"
-        f"- 總字數不超過250字\n"
-        f"- 不使用emoji\n"
-        f"- 不使用markdown格式（禁止使用**、##、-等符號）\n"
-        f"- 用純文字寫作，每個重點之間換行\n"
-        f"- 語氣專業但易懂\n\n"
-        f"分析重點：\n"
-        f"1. 推測模型效能變化的可能根本原因\n"
-        f"2. 各指標間的因果關聯\n"
-        f"3. 提出具體改善建議\n\n"
+        f"你是醫療AI模型監控專家。根據以下IDH（血液透析中低血壓）預測模型的監控指標，寫一段結構化的分析報告。\n\n"
+        f"格式要求（非常重要，務必嚴格遵守）：\n"
+        f"1. 用以下四個段落標題分段，每段標題前加上對應符號：\n"
+        f"   [現況] 模型本期表現概述（1~2句話總結）\n"
+        f"   [老化] 模型老化跡象分析（根據三大老化指標判斷）\n"
+        f"   [原因] 效能變化的可能根本原因（推測具體原因）\n"
+        f"   [建議] 具體改善行動方案（可執行的建議）\n"
+        f"2. 每段內用「・」開頭條列重點，每條不超過30字\n"
+        f"3. 全文不超過300字\n"
+        f"4. 不使用emoji、不使用markdown格式\n"
+        f"5. 語氣專業但易懂\n\n"
         f"--- 監控數據 ---\n"
         f"模型版本：{info['model_version']}\n"
         f"監測期間：{info['start_date']}~{info['end_date']}\n"
         f"總樣本：{info['total']}筆，正例比例：{info['prevalence']}%\n"
         f"預測正確：{info['correct']}筆（{info['accuracy']}%）\n"
-        f"預測錯誤：{info['incorrect']}筆（{round(100 - info['accuracy'], 2)}%）\n"
-        f"{chr(10).join(gates_lines)}\n"
-        f"F1: {report['additional']['F1']}\n"
-        f"ECE: {report['additional']['ECE']} / Brier: {report['additional']['Brier']}\n"
+        f"預測錯誤：{info['incorrect']}筆（{round(100 - info['accuracy'], 2)}%）\n\n"
+        f"安全閘門：\n{chr(10).join(gates_lines)}\n\n"
+        f"老化指標：\n{chr(10).join(aging_lines)}\n\n"
+        f"附加指標：\n"
+        f"  F1: {report['additional']['F1']}\n"
+        f"  ECE: {report['additional']['ECE']}\n"
+        f"  Brier: {report['additional']['Brier']}\n"
+        f"  JS Divergence: {report['additional']['JS_divergence']}\n"
     )
 
     return report
+
+
+# ==========================================
+# 9. Adaptive Thresholds
+# ==========================================
+
+# Absolute floor/ceiling values — never let adaptive thresholds go beyond these
+_ADAPTIVE_FLOORS = {
+    'Sensitivity': {'min': 0.15},
+    'FPR':         {'max': 0.50},
+    'AUPRC':       {'min': 0.20},
+    'AUROC':       {'min': 0.50},
+}
+
+
+def compute_adaptive_thresholds(baseline_report):
+    """
+    Compute safety gate thresholds based on baseline model performance.
+
+    Strategy:
+    - Performance metrics (Sensitivity, AUPRC, AUROC): threshold = baseline × decay_rate
+    - FPR (lower is better): threshold = baseline × inflation_rate
+    - All values clamped by absolute floor/ceiling
+
+    Args:
+        baseline_report: dict from generate_monthly_report (needs 'safety_gates')
+
+    Returns:
+        dict keyed by metric name with 'min' or 'max' threshold
+    """
+    if not baseline_report or not baseline_report.get('safety_gates'):
+        return None
+
+    # Build baseline value lookup
+    baseline_vals = {}
+    for gate in baseline_report['safety_gates']:
+        baseline_vals[gate['metric']] = gate['value']
+
+    adaptive = {}
+
+    for metric_name, floor in _ADAPTIVE_FLOORS.items():
+        bval = baseline_vals.get(metric_name)
+        if bval is None:
+            continue
+
+        gate_info = SAFETY_GATES.get(metric_name, {})
+
+        if 'min' in gate_info:
+            # Higher is better — allow 15% degradation
+            thresh = round(bval * 0.85, 4)
+            absolute_floor = floor.get('min', 0.0)
+            thresh = max(thresh, absolute_floor)
+            adaptive[metric_name] = {
+                **gate_info,
+                'min': thresh,
+            }
+        elif 'max' in gate_info:
+            # Lower is better (FPR) — allow 50% increase
+            thresh = round(bval * 1.50, 4)
+            absolute_ceiling = floor.get('max', 1.0)
+            thresh = min(thresh, absolute_ceiling)
+            adaptive[metric_name] = {
+                **gate_info,
+                'max': thresh,
+            }
+
+    return adaptive if adaptive else None
+
+
+# ==========================================
+# 10. Single-Model Longevity Analysis
+# ==========================================
+
+def compute_single_model_longevity(windows, baseline_data, dates, model,
+                                    final_feats, target_col,
+                                    adaptive_thresholds=None):
+    """
+    Analyze single-model lifespan using safety gate pass/fail patterns over time.
+
+    Instead of inventing new thresholds, reuses safety gates to determine
+    each window's health status, then looks at the temporal pattern.
+
+    Args:
+        windows: list of DataFrames (time windows)
+        baseline_data: baseline DataFrame or None
+        dates: list of window end dates
+        model: model object
+        final_feats: list of feature names
+        target_col: target column name
+        adaptive_thresholds: dict from compute_adaptive_thresholds (or None for defaults)
+
+    Returns:
+        dict with longevity analysis results
+    """
+    if not windows or len(windows) < 2:
+        return {
+            'level': '資料不足',
+            'level_code': 'unknown',
+            'health_score': 0,
+            'timeline': [],
+            'n_windows': 0,
+            'max_consecutive_pass': 0,
+            'first_degradation': None,
+            'trend_slope': 0.0,
+        }
+
+    import sklearn.metrics as skm
+
+    # Use adaptive thresholds if available, otherwise defaults
+    gates_config = adaptive_thresholds if adaptive_thresholds else SAFETY_GATES
+
+    timeline = []
+    auprc_values = []
+
+    for i, w_df in enumerate(windows):
+        try:
+            X_infer = (w_df.drop(columns=[target_col], errors='ignore')
+                       if getattr(model, 'is_moe', False)
+                       else w_df[final_feats])
+            y = w_df[target_col]
+
+            valid_mask = ~y.isna()
+            if valid_mask.sum() < 2:
+                continue
+
+            y_clean = y[valid_mask]
+            X_clean = X_infer.loc[valid_mask] if hasattr(X_infer, 'loc') else X_infer[valid_mask.values]
+
+            y_pred = model.predict(X_clean).astype(float)
+            y_prob = model.predict_proba(X_clean)[:, 1]
+
+            y_arr = np.array(y_clean)
+            y_pred_arr = np.array(y_pred)
+
+            tp = int(((y_pred_arr == 1) & (y_arr == 1)).sum())
+            tn = int(((y_pred_arr == 0) & (y_arr == 0)).sum())
+            fp = int(((y_pred_arr == 1) & (y_arr == 0)).sum())
+            fn = int(((y_pred_arr == 0) & (y_arr == 1)).sum())
+
+            sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+            try:
+                auroc = roc_auc_score(y_arr, y_prob)
+            except Exception:
+                auroc = 0.5
+            try:
+                prec_c, rec_c, _ = precision_recall_curve(y_arr, y_prob)
+                auprc = auc(rec_c, prec_c)
+            except Exception:
+                auprc = 0.0
+
+            gate_values = {
+                'Sensitivity': round(sensitivity, 4),
+                'FPR': round(fpr, 4),
+                'AUPRC': round(auprc, 4),
+                'AUROC': round(auroc, 4),
+            }
+
+            # Check each gate
+            n_pass = 0
+            n_total = 0
+            for metric_name, gate in gates_config.items():
+                val = gate_values.get(metric_name)
+                if val is None:
+                    continue
+                n_total += 1
+                if 'min' in gate and val >= gate['min']:
+                    n_pass += 1
+                elif 'max' in gate and val <= gate['max']:
+                    n_pass += 1
+
+            pass_rate = n_pass / n_total if n_total > 0 else 0.0
+            all_pass = (n_pass == n_total)
+
+            auprc_values.append(auprc)
+            timeline.append({
+                'window': i + 1,
+                'date': dates[i].strftime('%Y/%m/%d') if hasattr(dates[i], 'strftime') else str(dates[i])[:10],
+                'auprc': round(auprc, 4),
+                'pass_rate': round(pass_rate, 2),
+                'all_pass': all_pass,
+                'n_pass': n_pass,
+                'n_total': n_total,
+            })
+        except Exception:
+            continue
+
+    if not timeline:
+        return {
+            'level': '資料不足',
+            'level_code': 'unknown',
+            'health_score': 0,
+            'timeline': [],
+            'n_windows': 0,
+            'max_consecutive_pass': 0,
+            'first_degradation': None,
+            'trend_slope': 0.0,
+        }
+
+    n_windows = len(timeline)
+
+    # Max consecutive all-pass windows
+    max_consecutive = 0
+    current_consec = 0
+    for t in timeline:
+        if t['all_pass']:
+            current_consec += 1
+            max_consecutive = max(max_consecutive, current_consec)
+        else:
+            current_consec = 0
+
+    # First degradation (first window that didn't all-pass)
+    first_degradation = None
+    for t in timeline:
+        if not t['all_pass']:
+            first_degradation = t['window']
+            break
+
+    # AUPRC trend slope (weighted — recent windows matter more)
+    trend_slope = 0.0
+    if len(auprc_values) >= 3:
+        x = np.arange(len(auprc_values))
+        # Exponential weights: more recent = heavier
+        weights = np.exp(np.linspace(0, 2, len(auprc_values)))
+        weights /= weights.sum()
+        # Weighted least squares
+        x_mean = np.average(x, weights=weights)
+        y_mean = np.average(auprc_values, weights=weights)
+        num = np.sum(weights * (x - x_mean) * (np.array(auprc_values) - y_mean))
+        den = np.sum(weights * (x - x_mean) ** 2)
+        trend_slope = float(num / den) if den != 0 else 0.0
+
+    # === Determine level using voting (no new magic numbers) ===
+    recent_n = min(5, n_windows)
+    recent = timeline[-recent_n:]
+
+    if all(t['all_pass'] for t in recent):
+        level = '穩定'
+        level_code = 'stable'
+    elif sum(t['all_pass'] for t in recent) >= (recent_n * 0.6):
+        level = '觀察'
+        level_code = 'watch'
+    elif any(t['all_pass'] for t in recent):
+        level = '警示'
+        level_code = 'warning'
+    else:
+        level = '失效'
+        level_code = 'critical'
+
+    # Health score (0-100, equal weights)
+    in_band_ratio = sum(1 for t in timeline if t['all_pass']) / n_windows
+    recent_pass_ratio = sum(1 for t in recent if t['all_pass']) / recent_n
+    consecutive_ratio = max_consecutive / n_windows if n_windows > 0 else 0
+    slope_stability = max(0, 1 + trend_slope * 10)  # slope ~ -0.04 → 0.6, slope ~ 0 → 1.0
+
+    health_score = int(round(
+        (in_band_ratio + recent_pass_ratio + consecutive_ratio + min(slope_stability, 1.0)) / 4.0 * 100
+    ))
+    health_score = max(0, min(100, health_score))
+
+    return {
+        'level': level,
+        'level_code': level_code,
+        'health_score': health_score,
+        'timeline': timeline,
+        'n_windows': n_windows,
+        'max_consecutive_pass': max_consecutive,
+        'first_degradation': first_degradation,
+        'trend_slope': round(trend_slope, 6),
+    }
+
+
+# ==========================================
+# 11. Combined LLM Prompt (Dual Window Configs)
+# ==========================================
+
+def build_combined_llm_prompt(report_a, report_b, label_a='90天窗格', label_b='30天窗格'):
+    """
+    Merge two window-config reports into a single LLM prompt.
+    The LLM is asked to output tagged sections for each config.
+
+    Args:
+        report_a: dict from generate_monthly_report (config A, e.g., 90-day)
+        report_b: dict from generate_monthly_report (config B, e.g., 30-day)
+
+    Returns:
+        str: combined prompt string
+    """
+    def _format_report_data(report, label):
+        info = report.get('basic_info', {})
+        if info.get('error'):
+            return f"--- {label} ---\n資料不足，無法分析\n"
+
+        gates_lines = []
+        for g in report.get('safety_gates', []):
+            status = '達標' if g['passed'] else '未達標'
+            gates_lines.append(
+                f"  {g['metric']}: {g['value']} (門檻{g['threshold']}) [{status}]"
+            )
+
+        aging_lines = []
+        for ai in report.get('aging_indicators', []):
+            status_map = {'good': '正常', 'warning': '注意', 'critical': '警告'}
+            aging_lines.append(
+                f"  {ai['label']}（{ai['metric']}）= {ai['value']} [{status_map.get(ai['status'], '未知')}]"
+            )
+
+        return (
+            f"--- {label} ---\n"
+            f"監測期間：{info['start_date']}~{info['end_date']}\n"
+            f"總樣本：{info['total']}筆，正例比例：{info['prevalence']}%\n"
+            f"預測正確：{info['correct']}筆（{info['accuracy']}%）\n"
+            f"安全閘門：\n{chr(10).join(gates_lines)}\n"
+            f"老化指標：\n{chr(10).join(aging_lines)}\n"
+            f"F1: {report['additional']['F1']}  ECE: {report['additional']['ECE']}  "
+            f"Brier: {report['additional']['Brier']}  JS Div: {report['additional'].get('JS_divergence', 'N/A')}\n"
+        )
+
+    data_a = _format_report_data(report_a, label_a)
+    data_b = _format_report_data(report_b, label_b)
+
+    info_a = report_a.get('basic_info', {})
+    model_ver = info_a.get('model_version', '未知')
+
+    prompt = (
+        f"你是醫療AI模型監控專家。以下是IDH（血液透析中低血壓）預測模型 {model_ver} 在兩種不同時間粒度下的監控結果。\n\n"
+        f"格式要求（非常重要，務必嚴格遵守）：\n"
+        f"1. 用以下六個段落標題分段，每段標題前必須加方括號標記：\n"
+        f"   [90天-現況] 90天窗格觀察到的模型本期表現概述\n"
+        f"   [30天-現況] 30天窗格觀察到的模型本期表現概述\n"
+        f"   [90天-老化] 90天窗格觀察到的老化跡象\n"
+        f"   [30天-老化] 30天窗格觀察到的老化跡象\n"
+        f"   [原因] 效能變化的可能根本原因（綜合兩組觀察）\n"
+        f"   [建議] 具體改善行動方案（綜合兩組觀察）\n"
+        f"2. 每段內用「・」開頭條列重點，每條不超過30字\n"
+        f"3. 全文不超過500字\n"
+        f"4. 不使用emoji、不使用markdown格式\n"
+        f"5. 如果兩組結論有差異，在對應段落中特別指出\n\n"
+        f"{data_a}\n"
+        f"{data_b}\n"
+    )
+
+    return prompt
 
