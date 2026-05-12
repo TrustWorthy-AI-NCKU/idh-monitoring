@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,6 +11,143 @@
     <!-- Plotly.js from CDN -->
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
     <style>
+        /* ===== Theme Variables ===== */
+        :root, [data-theme="dark"] {
+            --bg-body: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --text-dimmed: #475569;
+            --text-highlight: #cbd5e1;
+            --accent: #6366f1;
+            --accent-soft: rgba(99, 102, 241, 0.15);
+            --accent-softer: rgba(99, 102, 241, 0.08);
+            --accent-border: rgba(99, 102, 241, 0.2);
+            --accent-border-strong: rgba(99, 102, 241, 0.4);
+            --accent-text: #a5b4fc;
+            --accent-text-light: #c7d2fe;
+            --accent-text-mid: #818cf8;
+            --header-bg: rgba(15, 23, 42, 0.8);
+            --header-border: rgba(99, 102, 241, 0.2);
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --card-border: rgba(99, 102, 241, 0.15);
+            --card-bg-deeper: rgba(15, 23, 42, 0.6);
+            --card-bg-alt: rgba(30, 41, 59, 0.5);
+            --card-bg-alt2: rgba(30, 41, 59, 0.6);
+            --card-bg-alt3: rgba(15, 23, 42, 0.4);
+            --card-bg-alt4: rgba(15, 23, 42, 0.5);
+            --card-bg-alt5: rgba(15, 23, 42, 0.3);
+            --dashboard-bg: rgba(30, 41, 59, 0.5);
+            --dashboard-border: rgba(99, 102, 241, 0.1);
+            --sidebar-toggle-bg: rgba(99, 102, 241, 0.3);
+            --sidebar-toggle-border: rgba(99, 102, 241, 0.4);
+            --model-info-bg: rgba(30, 41, 59, 0.6);
+            --model-info-border: rgba(99, 102, 241, 0.15);
+            --btn-gradient-from: #4f46e5;
+            --btn-gradient-to: #7c3aed;
+            --btn-hover-from: #4338ca;
+            --btn-hover-to: #6d28d9;
+            --success-bg: rgba(16, 185, 129, 0.1);
+            --success-border: rgba(16, 185, 129, 0.3);
+            --success-text: #6ee7b7;
+            --error-bg: rgba(239, 68, 68, 0.1);
+            --error-border: rgba(239, 68, 68, 0.3);
+            --error-text: #fca5a5;
+            --warning-bg: rgba(245, 158, 11, 0.1);
+            --warning-border: rgba(245, 158, 11, 0.3);
+            --warning-text: #fbbf24;
+            --warning-text-bright: #fcd34d;
+            --moe-section-bg: rgba(99, 102, 241, 0.03);
+            --moe-section-border: rgba(99, 102, 241, 0.25);
+            --divider-bg: rgba(30, 41, 59, 0.9);
+            --tab-bg: rgba(15, 23, 42, 0.4);
+            --tab-border: rgba(99, 102, 241, 0.2);
+            --file-btn-from: #4f46e5;
+            --file-btn-to: #6366f1;
+            --adv-input-bg: rgba(30, 41, 59, 0.8);
+            --step-dot-bg: #334155;
+            --gauge-bg: rgba(30, 41, 59, 0.8);
+            --tooltip-bg: rgba(15, 23, 42, 0.95);
+            --tooltip-border: rgba(99, 102, 241, 0.3);
+            --health-popup-bg: #1e293b;
+            --health-popup-border: rgba(148, 163, 184, 0.2);
+            --health-info-btn-bg: rgba(30, 41, 59, 0.6);
+            --health-info-btn-border: rgba(148, 163, 184, 0.3);
+            --shadow-color: rgba(0, 0, 0, 0.3);
+            --plotly-paper: transparent;
+            --plotly-plot: transparent;
+            --plotly-font: #94a3b8;
+            --plotly-grid: rgba(99, 102, 241, 0.08);
+        }
+
+        [data-theme="light"] {
+            --bg-body: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --text-muted: #64748b;
+            --text-dimmed: #94a3b8;
+            --text-highlight: #334155;
+            --accent: #4f46e5;
+            --accent-soft: rgba(79, 70, 229, 0.1);
+            --accent-softer: rgba(79, 70, 229, 0.05);
+            --accent-border: rgba(79, 70, 229, 0.2);
+            --accent-border-strong: rgba(79, 70, 229, 0.35);
+            --accent-text: #4338ca;
+            --accent-text-light: #6366f1;
+            --accent-text-mid: #4f46e5;
+            --header-bg: rgba(255, 255, 255, 0.85);
+            --header-border: rgba(79, 70, 229, 0.15);
+            --card-bg: rgba(255, 255, 255, 0.85);
+            --card-border: rgba(79, 70, 229, 0.12);
+            --card-bg-deeper: rgba(241, 245, 249, 0.8);
+            --card-bg-alt: rgba(248, 250, 252, 0.9);
+            --card-bg-alt2: rgba(241, 245, 249, 0.7);
+            --card-bg-alt3: rgba(241, 245, 249, 0.6);
+            --card-bg-alt4: rgba(241, 245, 249, 0.7);
+            --card-bg-alt5: rgba(248, 250, 252, 0.5);
+            --dashboard-bg: rgba(255, 255, 255, 0.75);
+            --dashboard-border: rgba(79, 70, 229, 0.08);
+            --sidebar-toggle-bg: rgba(79, 70, 229, 0.15);
+            --sidebar-toggle-border: rgba(79, 70, 229, 0.25);
+            --model-info-bg: rgba(248, 250, 252, 0.9);
+            --model-info-border: rgba(79, 70, 229, 0.12);
+            --btn-gradient-from: #4f46e5;
+            --btn-gradient-to: #7c3aed;
+            --btn-hover-from: #4338ca;
+            --btn-hover-to: #6d28d9;
+            --success-bg: rgba(16, 185, 129, 0.08);
+            --success-border: rgba(16, 185, 129, 0.25);
+            --success-text: #059669;
+            --error-bg: rgba(239, 68, 68, 0.08);
+            --error-border: rgba(239, 68, 68, 0.25);
+            --error-text: #dc2626;
+            --warning-bg: rgba(245, 158, 11, 0.08);
+            --warning-border: rgba(245, 158, 11, 0.25);
+            --warning-text: #d97706;
+            --warning-text-bright: #b45309;
+            --moe-section-bg: rgba(79, 70, 229, 0.03);
+            --moe-section-border: rgba(79, 70, 229, 0.2);
+            --divider-bg: rgba(255, 255, 255, 0.95);
+            --tab-bg: rgba(241, 245, 249, 0.6);
+            --tab-border: rgba(79, 70, 229, 0.15);
+            --file-btn-from: #4f46e5;
+            --file-btn-to: #6366f1;
+            --adv-input-bg: rgba(241, 245, 249, 0.8);
+            --step-dot-bg: #cbd5e1;
+            --gauge-bg: rgba(226, 232, 240, 0.8);
+            --tooltip-bg: rgba(255, 255, 255, 0.97);
+            --tooltip-border: rgba(79, 70, 229, 0.2);
+            --health-popup-bg: #ffffff;
+            --health-popup-border: rgba(100, 116, 139, 0.2);
+            --health-info-btn-bg: rgba(241, 245, 249, 0.8);
+            --health-info-btn-border: rgba(100, 116, 139, 0.25);
+            --shadow-color: rgba(0, 0, 0, 0.08);
+            --plotly-paper: transparent;
+            --plotly-plot: transparent;
+            --plotly-font: #475569;
+            --plotly-grid: rgba(79, 70, 229, 0.08);
+        }
+
         *, *::before, *::after {
             box-sizing: border-box;
             margin: 0;
@@ -19,20 +156,22 @@
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            background: var(--bg-body);
             min-height: 100vh;
-            color: #e2e8f0;
+            color: var(--text-primary);
+            transition: background 0.3s ease, color 0.3s ease;
         }
 
         /* Header */
         .header {
-            background: rgba(15, 23, 42, 0.8);
+            background: var(--header-bg);
             backdrop-filter: blur(12px);
-            border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+            border-bottom: 1px solid var(--header-border);
             padding: 16px 32px;
             display: flex;
             align-items: center;
             gap: 12px;
+            transition: background 0.3s ease, border-color 0.3s ease;
         }
 
         .header-icon {
@@ -49,15 +188,62 @@
         .header h1 {
             font-size: 20px;
             font-weight: 700;
-            background: linear-gradient(135deg, #c7d2fe, #a5b4fc);
+            background: linear-gradient(135deg, var(--accent-text-light), var(--accent-text));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
         .header-subtitle {
             font-size: 13px;
-            color: #64748b;
+            color: var(--text-muted);
+        }
+
+        /* Theme Toggle Button */
+        .theme-toggle {
             margin-left: auto;
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            border: 1px solid var(--accent-border);
+            background: var(--accent-softer);
+            color: var(--accent-text);
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .theme-toggle:hover {
+            background: var(--accent-soft);
+            border-color: var(--accent-border-strong);
+            transform: rotate(20deg) scale(1.1);
+        }
+
+        .header-right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-link {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--accent-border);
+            background: var(--accent-softer);
+            color: var(--text-secondary);
+            font-size: 13px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .nav-link:hover, .nav-link.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
         }
 
         /* Main Layout */
@@ -90,9 +276,9 @@
             top: 50%;
             transform: translateY(-50%);
             z-index: 100;
-            background: rgba(99, 102, 241, 0.3);
-            border: 1px solid rgba(99, 102, 241, 0.4);
-            color: #a5b4fc;
+            background: var(--sidebar-toggle-bg);
+            border: 1px solid var(--sidebar-toggle-border);
+            color: var(--accent-text);
             border-radius: 0 8px 8px 0;
             padding: 12px 6px;
             cursor: pointer;
@@ -103,7 +289,7 @@
         }
 
         .sidebar-toggle-btn:hover {
-            background: rgba(99, 102, 241, 0.5);
+            background: var(--accent-soft);
         }
 
         .sidebar-toggle-btn.visible {
@@ -112,8 +298,8 @@
 
         /* Model Info Bar */
         .model-info-bar {
-            background: rgba(30, 41, 59, 0.6);
-            border: 1px solid rgba(99, 102, 241, 0.15);
+            background: var(--model-info-bg);
+            border: 1px solid var(--model-info-border);
             border-radius: 10px;
             padding: 12px 20px;
             margin-bottom: 16px;
@@ -121,8 +307,9 @@
             align-items: center;
             gap: 20px;
             font-size: 12px;
-            color: #94a3b8;
+            color: var(--text-secondary);
             flex-wrap: wrap;
+            transition: background 0.3s ease, border-color 0.3s ease;
         }
 
         .model-info-bar .info-item {
@@ -132,28 +319,29 @@
         }
 
         .model-info-bar .info-item strong {
-            color: #cbd5e1;
+            color: var(--text-highlight);
         }
 
         .model-info-bar .info-divider {
             width: 1px;
             height: 16px;
-            background: rgba(99, 102, 241, 0.2);
+            background: var(--accent-border);
         }
 
         .card {
-            background: rgba(30, 41, 59, 0.7);
+            background: var(--card-bg);
             backdrop-filter: blur(8px);
-            border: 1px solid rgba(99, 102, 241, 0.15);
+            border: 1px solid var(--card-border);
             border-radius: 12px;
             padding: 24px;
             margin-bottom: 16px;
+            transition: background 0.3s ease, border-color 0.3s ease;
         }
 
         .card-title {
             font-size: 14px;
             font-weight: 600;
-            color: #a5b4fc;
+            color: var(--accent-text);
             text-transform: uppercase;
             letter-spacing: 0.05em;
             margin-bottom: 16px;
@@ -165,8 +353,8 @@
         .card-title .collapse-toggle {
             margin-left: auto;
             background: none;
-            border: 1px solid rgba(99, 102, 241, 0.3);
-            color: #818cf8;
+            border: 1px solid var(--accent-border);
+            color: var(--accent-text-mid);
             border-radius: 6px;
             padding: 4px 10px;
             font-size: 11px;
@@ -176,8 +364,8 @@
         }
 
         .card-title .collapse-toggle:hover {
-            background: rgba(99, 102, 241, 0.15);
-            border-color: #6366f1;
+            background: var(--accent-soft);
+            border-color: var(--accent);
         }
 
         .card-title::before {
@@ -193,17 +381,17 @@
             display: block;
             font-size: 13px;
             font-weight: 500;
-            color: #94a3b8;
+            color: var(--text-secondary);
             margin-bottom: 6px;
         }
 
         .form-control {
             width: 100%;
             padding: 10px 12px;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(99, 102, 241, 0.2);
+            background: var(--card-bg-deeper);
+            border: 1px solid var(--accent-border);
             border-radius: 8px;
-            color: #e2e8f0;
+            color: var(--text-primary);
             font-size: 13px;
             font-family: 'Inter', sans-serif;
             transition: all 0.2s ease;
@@ -211,14 +399,14 @@
 
         .form-control:focus {
             outline: none;
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
         }
 
         .form-control::file-selector-button {
             padding: 6px 14px;
             margin-right: 12px;
-            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            background: linear-gradient(135deg, var(--file-btn-from), var(--file-btn-to));
             color: white;
             border: none;
             border-radius: 6px;
@@ -229,7 +417,7 @@
         }
 
         .form-control::file-selector-button:hover {
-            background: linear-gradient(135deg, #4338ca, #4f46e5);
+            background: linear-gradient(135deg, var(--btn-hover-from), var(--file-btn-from));
         }
 
         textarea.form-control {
@@ -243,7 +431,7 @@
 
         .help-text {
             font-size: 11px;
-            color: #64748b;
+            color: var(--text-muted);
             margin-top: 4px;
             line-height: 1.5;
         }
@@ -252,7 +440,7 @@
         .btn-primary {
             width: 100%;
             padding: 12px 20px;
-            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            background: linear-gradient(135deg, var(--btn-gradient-from), var(--btn-gradient-to));
             color: white;
             border: none;
             border-radius: 8px;
@@ -267,7 +455,7 @@
         }
 
         .btn-primary:hover {
-            background: linear-gradient(135deg, #4338ca, #6d28d9);
+            background: linear-gradient(135deg, var(--btn-hover-from), var(--btn-hover-to));
             transform: translateY(-1px);
             box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
         }
@@ -282,15 +470,15 @@
             margin-bottom: 16px;
             border-radius: 8px;
             overflow: hidden;
-            border: 1px solid rgba(99, 102, 241, 0.2);
+            border: 1px solid var(--tab-border);
         }
 
         .model-tab {
             flex: 1;
             padding: 10px 16px;
-            background: rgba(15, 23, 42, 0.4);
+            background: var(--tab-bg);
             border: none;
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
@@ -299,17 +487,17 @@
         }
 
         .model-tab:first-child {
-            border-right: 1px solid rgba(99, 102, 241, 0.2);
+            border-right: 1px solid var(--tab-border);
         }
 
         .model-tab.active {
-            background: rgba(99, 102, 241, 0.15);
-            color: #a5b4fc;
+            background: var(--accent-soft);
+            color: var(--accent-text);
         }
 
         .model-tab:hover:not(.active) {
-            background: rgba(99, 102, 241, 0.08);
-            color: #94a3b8;
+            background: var(--accent-softer);
+            color: var(--text-secondary);
         }
 
         .tab-content {
@@ -322,17 +510,17 @@
 
         /* MoE Dynamic Fields */
         .moe-section {
-            border: 1px dashed rgba(99, 102, 241, 0.25);
+            border: 1px dashed var(--moe-section-border);
             border-radius: 8px;
             padding: 16px;
             margin-top: 12px;
-            background: rgba(99, 102, 241, 0.03);
+            background: var(--moe-section-bg);
         }
 
         .moe-section-label {
             font-size: 12px;
             font-weight: 600;
-            color: #818cf8;
+            color: var(--accent-text-mid);
             text-transform: uppercase;
             letter-spacing: 0.05em;
             margin-bottom: 12px;
@@ -353,8 +541,8 @@
             width: 32px;
             height: 32px;
             border-radius: 6px;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid var(--error-border);
+            background: var(--error-bg);
             color: #f87171;
             font-size: 16px;
             cursor: pointer;
@@ -373,10 +561,10 @@
         .btn-add-expert {
             width: 100%;
             padding: 8px;
-            border: 1px dashed rgba(99, 102, 241, 0.3);
+            border: 1px dashed var(--accent-border);
             border-radius: 8px;
-            background: rgba(99, 102, 241, 0.05);
-            color: #818cf8;
+            background: var(--accent-softer);
+            color: var(--accent-text-mid);
             font-size: 13px;
             font-weight: 500;
             cursor: pointer;
@@ -386,12 +574,12 @@
         }
 
         .btn-add-expert:hover {
-            background: rgba(99, 102, 241, 0.12);
-            border-color: rgba(99, 102, 241, 0.5);
+            background: var(--accent-soft);
+            border-color: var(--accent-border-strong);
         }
 
         .comparison-divider {
-            border-top: 1px solid rgba(99, 102, 241, 0.15);
+            border-top: 1px solid var(--card-border);
             margin: 16px 0;
             position: relative;
         }
@@ -402,11 +590,11 @@
             top: -10px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(30, 41, 59, 0.9);
+            background: var(--divider-bg);
             padding: 2px 10px;
             font-size: 11px;
             font-weight: 700;
-            color: #818cf8;
+            color: var(--accent-text-mid);
             border-radius: 4px;
         }
 
@@ -427,15 +615,15 @@
         }
 
         .message-success {
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-            color: #6ee7b7;
+            background: var(--success-bg);
+            border: 1px solid var(--success-border);
+            color: var(--success-text);
         }
 
         .message-error {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #fca5a5;
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
+            color: var(--error-text);
         }
 
         /* Dashboard Area */
@@ -445,20 +633,21 @@
         }
 
         .dashboard-card {
-            background: rgba(30, 41, 59, 0.5);
+            background: var(--dashboard-bg);
             backdrop-filter: blur(8px);
-            border: 1px solid rgba(99, 102, 241, 0.1);
+            border: 1px solid var(--dashboard-border);
             border-radius: 12px;
             padding: 24px;
             min-height: 600px;
+            transition: background 0.3s ease, border-color 0.3s ease;
         }
 
         /* Metrics filter bar */
         .metrics-bar {
             padding: 16px 20px;
-            background: rgba(15, 23, 42, 0.6);
+            background: var(--card-bg-deeper);
             border-radius: 8px;
-            border: 1px solid rgba(99, 102, 241, 0.15);
+            border: 1px solid var(--card-border);
             margin-bottom: 16px;
             display: flex;
             align-items: center;
@@ -469,7 +658,7 @@
         .metrics-bar label.filter-label {
             font-weight: 600;
             font-size: 14px;
-            color: #a5b4fc;
+            color: var(--accent-text);
             margin-bottom: 0;
         }
 
@@ -482,7 +671,7 @@
         }
 
         .metric-checkbox input[type="checkbox"] {
-            accent-color: #6366f1;
+            accent-color: var(--accent);
             width: 16px;
             height: 16px;
             cursor: pointer;
@@ -490,7 +679,7 @@
 
         .metric-checkbox span {
             font-size: 14px;
-            color: #cbd5e1;
+            color: var(--text-highlight);
         }
 
         /* Placeholder */
@@ -500,7 +689,7 @@
             align-items: center;
             justify-content: center;
             min-height: 500px;
-            color: #475569;
+            color: var(--text-dimmed);
             text-align: center;
         }
 
@@ -513,13 +702,13 @@
         .placeholder h2 {
             font-size: 18px;
             font-weight: 600;
-            color: #64748b;
+            color: var(--text-muted);
             margin-bottom: 8px;
         }
 
         .placeholder p {
             font-size: 14px;
-            color: #475569;
+            color: var(--text-dimmed);
         }
 
         /* Status Badge */
@@ -534,24 +723,24 @@
         }
 
         .status-ready {
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-            color: #6ee7b7;
+            background: var(--success-bg);
+            border: 1px solid var(--success-border);
+            color: var(--success-text);
         }
 
         .status-waiting {
-            background: rgba(245, 158, 11, 0.1);
-            border: 1px solid rgba(245, 158, 11, 0.3);
-            color: #fbbf24;
+            background: var(--warning-bg);
+            border: 1px solid var(--warning-border);
+            color: var(--warning-text);
         }
 
         /* Error banner */
         .error-banner {
             padding: 16px;
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
             border-radius: 8px;
-            color: #fca5a5;
+            color: var(--error-text);
             font-size: 14px;
         }
 
@@ -570,7 +759,7 @@
         .alerts-header {
             font-size: 14px;
             font-weight: 600;
-            color: #a5b4fc;
+            color: var(--accent-text);
             text-transform: uppercase;
             letter-spacing: 0.05em;
             display: flex;
@@ -580,22 +769,22 @@
 
         .analysis-meta {
             font-size: 12px;
-            color: #64748b;
+            color: var(--text-muted);
             margin-bottom: 12px;
             padding: 8px 12px;
-            background: rgba(15, 23, 42, 0.4);
+            background: var(--card-bg-alt3);
             border-radius: 6px;
-            border: 1px solid rgba(99, 102, 241, 0.1);
+            border: 1px solid var(--dashboard-border);
         }
 
         .analysis-meta strong {
-            color: #a5b4fc;
+            color: var(--accent-text);
         }
 
         .collapse-btn {
             background: transparent;
-            border: 1px solid rgba(99, 102, 241, 0.25);
-            color: #94a3b8;
+            border: 1px solid var(--accent-border);
+            color: var(--text-secondary);
             font-size: 12px;
             padding: 4px 12px;
             border-radius: 6px;
@@ -604,8 +793,8 @@
         }
 
         .collapse-btn:hover {
-            background: rgba(99, 102, 241, 0.1);
-            color: #a5b4fc;
+            background: var(--accent-softer);
+            color: var(--accent-text);
         }
 
         /* Chart toggle bar */
@@ -617,9 +806,9 @@
         }
 
         .chart-toggle-btn {
-            background: rgba(30, 41, 59, 0.6);
-            border: 1px solid rgba(99, 102, 241, 0.2);
-            color: #64748b;
+            background: var(--card-bg-alt2);
+            border: 1px solid var(--accent-border);
+            color: var(--text-muted);
             font-size: 12px;
             padding: 6px 14px;
             border-radius: 8px;
@@ -629,14 +818,14 @@
         }
 
         .chart-toggle-btn:hover {
-            border-color: rgba(99, 102, 241, 0.4);
-            color: #a5b4fc;
+            border-color: var(--accent-border-strong);
+            color: var(--accent-text);
         }
 
         .chart-toggle-btn.active {
-            background: rgba(99, 102, 241, 0.15);
-            border-color: rgba(99, 102, 241, 0.5);
-            color: #c7d2fe;
+            background: var(--accent-soft);
+            border-color: var(--accent-border-strong);
+            color: var(--accent-text-light);
             box-shadow: 0 0 8px rgba(99, 102, 241, 0.15);
         }
 
@@ -647,20 +836,20 @@
             gap: 6px;
             cursor: pointer;
             font-size: 12px;
-            color: #64748b;
+            color: var(--text-muted);
             margin: 8px 0;
             user-select: none;
             transition: color 0.2s;
         }
 
         .advanced-settings-toggle:hover {
-            color: #a5b4fc;
+            color: var(--accent-text);
         }
 
         .advanced-panel {
             display: none;
-            background: rgba(15, 23, 42, 0.4);
-            border: 1px solid rgba(99, 102, 241, 0.15);
+            background: var(--card-bg-alt3);
+            border: 1px solid var(--card-border);
             border-radius: 8px;
             padding: 12px 16px;
             margin: 8px 0 16px 0;
@@ -680,15 +869,15 @@
 
         .adv-row label {
             font-size: 12px;
-            color: #94a3b8;
+            color: var(--text-secondary);
             min-width: 100px;
         }
 
         .adv-row input[type="number"] {
             width: 80px;
-            background: rgba(30, 41, 59, 0.8);
-            border: 1px solid rgba(99, 102, 241, 0.2);
-            color: #e2e8f0;
+            background: var(--adv-input-bg);
+            border: 1px solid var(--accent-border);
+            color: var(--text-primary);
             padding: 4px 8px;
             border-radius: 6px;
             font-size: 12px;
@@ -697,12 +886,12 @@
 
         .adv-row input[type="range"] {
             width: 120px;
-            accent-color: #818cf8;
+            accent-color: var(--accent-text-mid);
         }
 
         .adv-hint {
             font-size: 11px;
-            color: #475569;
+            color: var(--text-dimmed);
         }
 
         .btn-reset {
@@ -710,9 +899,9 @@
             align-items: center;
             justify-content: center;
             padding: 10px 16px;
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #f87171;
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
+            color: var(--error-text);
             font-size: 13px;
             font-family: inherit;
             border-radius: 8px;
@@ -725,7 +914,7 @@
         .btn-reset:hover {
             background: rgba(239, 68, 68, 0.2);
             border-color: rgba(239, 68, 68, 0.5);
-            color: #fca5a5;
+            color: var(--error-text);
         }
 
         .badges-container {
@@ -776,25 +965,25 @@
 
         /* Badge severity colors */
         .badge-critical {
-            border-color: rgba(239, 68, 68, 0.4);
-            color: #fca5a5;
+            border-color: var(--error-border);
+            color: var(--error-text);
         }
         .badge-critical .badge-dot { background: #ef4444; }
-        .badge-critical:hover { background: rgba(239, 68, 68, 0.08); }
+        .badge-critical:hover { background: var(--error-bg); }
 
         .badge-warning {
-            border-color: rgba(245, 158, 11, 0.4);
-            color: #fcd34d;
+            border-color: var(--warning-border);
+            color: var(--warning-text-bright);
         }
         .badge-warning .badge-dot { background: #f59e0b; }
-        .badge-warning:hover { background: rgba(245, 158, 11, 0.08); }
+        .badge-warning:hover { background: var(--warning-bg); }
 
         .badge-info {
-            border-color: rgba(16, 185, 129, 0.4);
-            color: #6ee7b7;
+            border-color: var(--success-border);
+            color: var(--success-text);
         }
         .badge-info .badge-dot { background: #10b981; }
-        .badge-info:hover { background: rgba(16, 185, 129, 0.08); }
+        .badge-info:hover { background: var(--success-bg); }
 
         /* Show more / collapse buttons */
         .show-more-btn {
@@ -802,9 +991,9 @@
             width: 100%;
             padding: 6px;
             background: transparent;
-            border: 1px dashed rgba(99, 102, 241, 0.2);
+            border: 1px dashed var(--accent-border);
             border-radius: 6px;
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 12px;
             font-family: 'Inter', sans-serif;
             cursor: pointer;
@@ -813,9 +1002,9 @@
         }
 
         .show-more-btn:hover {
-            background: rgba(99, 102, 241, 0.05);
-            color: #a5b4fc;
-            border-color: rgba(99, 102, 241, 0.3);
+            background: var(--accent-softer);
+            color: var(--accent-text);
+            border-color: var(--accent-border);
         }
 
         /* Detail panel */
@@ -859,13 +1048,13 @@
             margin-bottom: 6px;
         }
 
-        .alert-detail-critical .alert-detail-title { color: #fca5a5; }
-        .alert-detail-warning .alert-detail-title { color: #fcd34d; }
-        .alert-detail-info .alert-detail-title { color: #6ee7b7; }
+        .alert-detail-critical .alert-detail-title { color: var(--error-text); }
+        .alert-detail-warning .alert-detail-title { color: var(--warning-text-bright); }
+        .alert-detail-info .alert-detail-title { color: var(--success-text); }
 
         .alert-detail-text {
             font-size: 13px;
-            color: #94a3b8;
+            color: var(--text-secondary);
             line-height: 1.7;
             white-space: pre-line;
         }
@@ -883,7 +1072,7 @@
         /* AI Analysis Report */
         .ai-analysis-section {
             margin-bottom: 16px;
-            background: rgba(15, 23, 42, 0.5);
+            background: var(--card-bg-alt4);
             border: 1px solid rgba(139, 92, 246, 0.25);
             border-left: 3px solid #8b5cf6;
             border-radius: 8px;
@@ -896,7 +1085,7 @@
 
         .ai-analysis-text {
             font-size: 14px;
-            color: #cbd5e1;
+            color: var(--text-highlight);
             line-height: 1.8;
             white-space: pre-line;
         }
@@ -913,29 +1102,29 @@
             align-items: center;
             gap: 10px;
             font-size: 12px;
-            color: #475569;
+            color: var(--text-dimmed);
             transition: color 0.3s ease;
         }
 
         .progress-step.active {
-            color: #a5b4fc;
+            color: var(--accent-text);
         }
 
         .progress-step.done {
-            color: #6ee7b7;
+            color: var(--success-text);
         }
 
         .step-dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: #334155;
+            background: var(--step-dot-bg);
             flex-shrink: 0;
             transition: all 0.3s ease;
         }
 
         .progress-step.active .step-dot {
-            background: #6366f1;
+            background: var(--accent);
             box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
             animation: pulse-dot 1.2s ease-in-out infinite;
         }
@@ -950,10 +1139,11 @@
         }
         .report-section {
             margin-bottom: 16px;
-            background: rgba(15, 23, 42, 0.5);
-            border: 1px solid rgba(99, 102, 241, 0.2);
+            background: var(--card-bg-alt4);
+            border: 1px solid var(--accent-border);
             border-radius: 8px;
             padding: 16px 20px;
+            transition: background 0.3s ease, border-color 0.3s ease;
         }
 
         .report-grid {
@@ -964,7 +1154,7 @@
         }
 
         .report-info-card {
-            background: rgba(30, 41, 59, 0.5);
+            background: var(--card-bg-alt);
             border-radius: 6px;
             padding: 10px 12px;
             text-align: center;
@@ -972,7 +1162,7 @@
 
         .report-info-label {
             font-size: 11px;
-            color: #64748b;
+            color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.05em;
             margin-bottom: 4px;
@@ -981,7 +1171,7 @@
         .report-info-value {
             font-size: 15px;
             font-weight: 600;
-            color: #e2e8f0;
+            color: var(--text-primary);
         }
 
         .report-accuracy-row {
@@ -989,18 +1179,18 @@
             gap: 20px;
             margin-bottom: 14px;
             padding: 8px 12px;
-            background: rgba(30, 41, 59, 0.4);
+            background: var(--card-bg-alt3);
             border-radius: 6px;
             font-size: 13px;
         }
 
-        .accuracy-correct { color: #6ee7b7; }
-        .accuracy-incorrect { color: #fca5a5; }
+        .accuracy-correct { color: var(--success-text); }
+        .accuracy-incorrect { color: var(--error-text); }
 
         .report-subtitle {
             font-size: 12px;
             font-weight: 600;
-            color: #94a3b8;
+            color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 0.05em;
             margin: 12px 0 8px 0;
@@ -1026,7 +1216,7 @@
 
         .gate-item:hover {
             transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 6px 20px var(--shadow-color);
         }
 
         .gate-pass {
@@ -1056,7 +1246,7 @@
         .gate-metric {
             font-size: 13px;
             font-weight: 600;
-            color: #e2e8f0;
+            color: var(--text-primary);
         }
 
         .gate-value {
@@ -1065,19 +1255,19 @@
             margin: 2px 0;
         }
 
-        .gate-pass .gate-value { color: #6ee7b7; }
-        .gate-fail .gate-value { color: #fca5a5; }
+        .gate-pass .gate-value { color: var(--success-text); }
+        .gate-fail .gate-value { color: var(--error-text); }
 
         .gate-threshold {
             font-size: 11px;
-            color: #64748b;
+            color: var(--text-muted);
         }
 
         /* Gauge bar */
         .gate-gauge {
             width: 100%;
             height: 6px;
-            background: rgba(30, 41, 59, 0.8);
+            background: var(--gauge-bg);
             border-radius: 3px;
             margin-top: 8px;
             position: relative;
@@ -1103,7 +1293,7 @@
             top: -4px;
             width: 2px;
             height: 14px;
-            background: #94a3b8;
+            background: var(--text-secondary);
             border-radius: 1px;
         }
 
@@ -1114,7 +1304,7 @@
             left: 50%;
             transform: translateX(-50%);
             font-size: 9px;
-            color: #94a3b8;
+            color: var(--text-secondary);
             white-space: nowrap;
             opacity: 0;
             transition: opacity 0.2s ease;
@@ -1132,18 +1322,18 @@
 
         .addl-metric {
             padding: 5px 14px;
-            background: rgba(30, 41, 59, 0.5);
+            background: var(--card-bg-alt);
             border-radius: 16px;
             font-size: 13px;
-            color: #94a3b8;
+            color: var(--text-secondary);
             position: relative;
             cursor: help;
             transition: all 0.2s ease;
         }
 
         .addl-metric:hover {
-            background: rgba(30, 41, 59, 0.8);
-            color: #e2e8f0;
+            background: var(--card-bg-alt2);
+            color: var(--text-primary);
         }
 
         .addl-metric .metric-tooltip {
@@ -1153,12 +1343,12 @@
             bottom: calc(100% + 8px);
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(15, 23, 42, 0.95);
-            border: 1px solid rgba(99, 102, 241, 0.3);
+            background: var(--tooltip-bg);
+            border: 1px solid var(--tooltip-border);
             border-radius: 8px;
             padding: 8px 12px;
             font-size: 12px;
-            color: #cbd5e1;
+            color: var(--text-highlight);
             white-space: nowrap;
             z-index: 100;
             transition: all 0.2s ease;
@@ -1172,7 +1362,7 @@
             left: 50%;
             transform: translateX(-50%);
             border: 5px solid transparent;
-            border-top-color: rgba(99, 102, 241, 0.3);
+            border-top-color: var(--tooltip-border);
         }
 
         .addl-metric:hover .metric-tooltip {
@@ -1182,18 +1372,18 @@
 
         .llm-summary-box {
             padding: 0;
-            background: rgba(15, 23, 42, 0.3);
+            background: var(--card-bg-alt5);
             border-left: 3px solid #8b5cf6;
             border-radius: 0 8px 8px 0;
             font-size: 14px;
-            color: #cbd5e1;
+            color: var(--text-highlight);
             line-height: 1.8;
             overflow: hidden;
         }
 
         .llm-section {
             padding: 12px 16px;
-            border-bottom: 1px solid rgba(99, 102, 241, 0.08);
+            border-bottom: 1px solid var(--dashboard-border);
         }
 
         .llm-section:last-child {
@@ -1203,7 +1393,7 @@
         .llm-section-title {
             font-size: 13px;
             font-weight: 700;
-            color: #a5b4fc;
+            color: var(--accent-text);
             margin-bottom: 6px;
             display: flex;
             align-items: center;
@@ -1218,14 +1408,14 @@
             letter-spacing: 0.05em;
         }
 
-        .section-tag-status { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; }
-        .section-tag-aging { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
-        .section-tag-cause { background: rgba(239, 68, 68, 0.12); color: #fca5a5; }
-        .section-tag-action { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+        .section-tag-status { background: var(--accent-soft); color: var(--accent-text); }
+        .section-tag-aging { background: var(--warning-bg); color: var(--warning-text-bright); }
+        .section-tag-cause { background: var(--error-bg); color: var(--error-text); }
+        .section-tag-action { background: var(--success-bg); color: var(--success-text); }
 
         .llm-bullet {
             font-size: 13px;
-            color: #94a3b8;
+            color: var(--text-secondary);
             padding: 2px 0 2px 16px;
             position: relative;
             line-height: 1.7;
@@ -1235,12 +1425,12 @@
             content: '\2022';
             position: absolute;
             left: 4px;
-            color: #64748b;
+            color: var(--text-muted);
         }
 
         .llm-plain-text {
             font-size: 14px;
-            color: #cbd5e1;
+            color: var(--text-highlight);
             line-height: 1.8;
             padding: 14px 18px;
             white-space: pre-line;
@@ -1258,7 +1448,7 @@
         }
 
         .aging-card {
-            background: rgba(30, 41, 59, 0.5);
+            background: var(--card-bg-alt);
             border-radius: 10px;
             padding: 14px;
             border: 1px solid;
@@ -1280,7 +1470,7 @@
 
         .aging-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 6px 20px var(--shadow-color);
         }
 
         .aging-card-good {
@@ -1309,14 +1499,14 @@
         .aging-card-label {
             font-size: 12px;
             font-weight: 700;
-            color: #e2e8f0;
+            color: var(--text-primary);
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
 
         .aging-card-metric {
             font-size: 11px;
-            color: #64748b;
+            color: var(--text-muted);
             margin-top: 2px;
         }
 
@@ -1326,9 +1516,9 @@
             margin: 6px 0 4px 0;
         }
 
-        .aging-card-good .aging-card-value { color: #6ee7b7; }
-        .aging-card-warning .aging-card-value { color: #fcd34d; }
-        .aging-card-critical .aging-card-value { color: #fca5a5; }
+        .aging-card-good .aging-card-value { color: var(--success-text); }
+        .aging-card-warning .aging-card-value { color: var(--warning-text-bright); }
+        .aging-card-critical .aging-card-value { color: var(--error-text); }
 
         .aging-card-status {
             font-size: 11px;
@@ -1342,7 +1532,7 @@
 
         .aging-card-desc {
             font-size: 11px;
-            color: #64748b;
+            color: var(--text-muted);
             margin-top: 6px;
             line-height: 1.5;
         }
@@ -1350,7 +1540,7 @@
         /* Gate aging badge */
         .gate-aging-badge {
             font-size: 10px;
-            color: #818cf8;
+            color: var(--accent-text-mid);
             margin-top: 4px;
             font-weight: 500;
         }
@@ -1362,21 +1552,21 @@
             margin-bottom: 16px;
             border-radius: 8px;
             overflow: hidden;
-            border: 1px solid rgba(99, 102, 241, 0.2);
+            border: 1px solid var(--tab-border);
         }
 
         .report-tab-btn {
             flex: 1;
             padding: 10px 16px;
-            background: rgba(15, 23, 42, 0.4);
+            background: var(--tab-bg);
             border: none;
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s ease;
             font-family: 'Inter', sans-serif;
-            border-right: 1px solid rgba(99, 102, 241, 0.15);
+            border-right: 1px solid var(--card-border);
         }
 
         .report-tab-btn:last-child {
@@ -1384,13 +1574,13 @@
         }
 
         .report-tab-btn.active {
-            background: rgba(99, 102, 241, 0.15);
-            color: #a5b4fc;
+            background: var(--accent-soft);
+            color: var(--accent-text);
         }
 
         .report-tab-btn:hover:not(.active) {
-            background: rgba(99, 102, 241, 0.08);
-            color: #94a3b8;
+            background: var(--accent-softer);
+            color: var(--text-secondary);
         }
 
         .report-tab-panel {
@@ -1406,7 +1596,7 @@
             display: flex;
             gap: 0;
             margin-bottom: 16px;
-            background: rgba(15, 23, 42, 0.5);
+            background: var(--card-bg-alt4);
             border-radius: 10px;
             padding: 3px;
             width: fit-content;
@@ -1415,7 +1605,7 @@
             padding: 7px 18px;
             border: none;
             background: transparent;
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
@@ -1423,11 +1613,11 @@
             transition: all 0.2s;
         }
         .window-toggle-btn.active {
-            background: rgba(99, 102, 241, 0.2);
-            color: #a5b4fc;
+            background: var(--accent-soft);
+            color: var(--accent-text);
         }
         .window-toggle-btn:hover:not(.active) {
-            color: #94a3b8;
+            color: var(--text-secondary);
         }
         .window-config-panel { display: none; }
         .window-config-panel.active { display: block; }
@@ -1443,16 +1633,16 @@
             .longevity-cards { grid-template-columns: repeat(2, 1fr); }
         }
         .longevity-card {
-            background: rgba(15, 23, 42, 0.4);
+            background: var(--card-bg-alt3);
             border-radius: 8px;
             padding: 10px 12px;
             text-align: center;
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            border: 1px solid var(--dashboard-border);
             position: relative;
         }
         .longevity-card-label {
             font-size: 10px;
-            color: #64748b;
+            color: var(--text-muted);
             margin-bottom: 4px;
             text-transform: uppercase;
             letter-spacing: 0.05em;
@@ -1460,11 +1650,11 @@
         .longevity-card-value {
             font-size: 20px;
             font-weight: 700;
-            color: #e2e8f0;
+            color: var(--text-primary);
         }
         .longevity-card-sub {
             font-size: 10px;
-            color: #94a3b8;
+            color: var(--text-secondary);
             margin-top: 2px;
         }
         .longevity-level-badge {
@@ -1475,11 +1665,11 @@
             font-weight: 700;
             margin-bottom: 12px;
         }
-        .longevity-level-stable { background: rgba(16,185,129,0.15); color: #6ee7b7; }
-        .longevity-level-watch  { background: rgba(251,191,36,0.15); color: #fbbf24; }
+        .longevity-level-stable { background: rgba(16,185,129,0.15); color: var(--success-text); }
+        .longevity-level-watch  { background: rgba(251,191,36,0.15); color: var(--warning-text); }
         .longevity-level-warning { background: rgba(251,146,60,0.15); color: #fb923c; }
-        .longevity-level-critical { background: rgba(239,68,68,0.15); color: #f87171; }
-        .longevity-level-unknown  { background: rgba(148,163,184,0.15); color: #94a3b8; }
+        .longevity-level-critical { background: rgba(239,68,68,0.15); color: var(--error-text); }
+        .longevity-level-unknown  { background: rgba(148,163,184,0.15); color: var(--text-secondary); }
 
         /* Health Score Info Button */
         .health-info-btn {
@@ -1489,9 +1679,9 @@
             width: 18px;
             height: 18px;
             border-radius: 50%;
-            border: 1px solid rgba(148,163,184,0.3);
-            background: rgba(30,41,59,0.6);
-            color: #64748b;
+            border: 1px solid var(--health-info-btn-border);
+            background: var(--health-info-btn-bg);
+            color: var(--text-muted);
             font-size: 11px;
             font-weight: 700;
             cursor: pointer;
@@ -1502,9 +1692,9 @@
             line-height: 1;
         }
         .health-info-btn:hover {
-            border-color: #818cf8;
-            color: #a5b4fc;
-            background: rgba(99,102,241,0.15);
+            border-color: var(--accent-text-mid);
+            color: var(--accent-text);
+            background: var(--accent-soft);
         }
 
         /* Health Score Popup */
@@ -1521,55 +1711,55 @@
             display: flex;
         }
         .health-popup {
-            background: #1e293b;
-            border: 1px solid rgba(148,163,184,0.2);
+            background: var(--health-popup-bg);
+            border: 1px solid var(--health-popup-border);
             border-radius: 12px;
             padding: 24px;
             max-width: 420px;
             width: 90%;
-            color: #e2e8f0;
+            color: var(--text-primary);
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
         }
         .health-popup-title {
             font-size: 15px;
             font-weight: 700;
             margin-bottom: 14px;
-            color: #a5b4fc;
+            color: var(--accent-text);
         }
         .health-popup-body {
             font-size: 13px;
             line-height: 1.7;
-            color: #cbd5e1;
+            color: var(--text-highlight);
         }
         .health-popup-body .formula-item {
             display: flex;
             gap: 8px;
             margin: 6px 0;
             padding: 6px 10px;
-            background: rgba(15,23,42,0.5);
+            background: var(--card-bg-alt4);
             border-radius: 6px;
             font-size: 12px;
         }
         .formula-item .fi-label {
-            color: #94a3b8;
+            color: var(--text-secondary);
             min-width: 100px;
         }
         .formula-item .fi-desc {
-            color: #e2e8f0;
+            color: var(--text-primary);
         }
         .health-popup-close {
             margin-top: 16px;
             padding: 6px 18px;
-            border: 1px solid rgba(148,163,184,0.2);
+            border: 1px solid var(--health-popup-border);
             background: transparent;
-            color: #94a3b8;
+            color: var(--text-secondary);
             border-radius: 6px;
             cursor: pointer;
             font-size: 12px;
         }
         .health-popup-close:hover {
-            background: rgba(99,102,241,0.1);
-            color: #a5b4fc;
+            background: var(--accent-softer);
+            color: var(--accent-text);
         }
 
         /* Longevity Progress Bar */
@@ -1581,7 +1771,7 @@
             height: 14px;
             border-radius: 7px;
             overflow: hidden;
-            background: rgba(15,23,42,0.6);
+            background: var(--card-bg-deeper);
         }
         .longevity-bar-segment {
             transition: width 0.3s;
@@ -1594,7 +1784,7 @@
             gap: 16px;
             margin-top: 6px;
             font-size: 10px;
-            color: #94a3b8;
+            color: var(--text-secondary);
         }
         .longevity-bar-legend span::before {
             content: '';
@@ -1623,7 +1813,7 @@
         }
 
         .analysis-panel {
-            background: rgba(15, 23, 42, 0.3);
+            background: var(--card-bg-alt5);
             border-left: 3px solid #8b5cf6;
             border-radius: 0 8px 8px 0;
             padding: 0;
@@ -1643,14 +1833,14 @@
             border-radius: 4px;
             font-weight: 600;
             letter-spacing: 0.05em;
-            background: rgba(99, 102, 241, 0.15);
-            color: #a5b4fc;
+            background: var(--accent-soft);
+            color: var(--accent-text);
         }
 
         .analysis-panel-header .analysis-panel-title {
             font-size: 13px;
             font-weight: 700;
-            color: #a5b4fc;
+            color: var(--accent-text);
         }
 
         .analysis-panel-body {
@@ -1659,7 +1849,7 @@
 
         .analysis-panel-body .llm-bullet {
             font-size: 13px;
-            color: #94a3b8;
+            color: var(--text-secondary);
             padding: 3px 0 3px 16px;
             line-height: 1.7;
         }
@@ -1672,8 +1862,8 @@
         .summary-winner {
             text-align: center;
             padding: 12px;
-            background: rgba(99, 102, 241, 0.08);
-            border: 1px solid rgba(99, 102, 241, 0.2);
+            background: var(--accent-softer);
+            border: 1px solid var(--accent-border);
             border-radius: 8px;
             margin-bottom: 12px;
             font-size: 14px;
@@ -1681,7 +1871,7 @@
 
         .summary-winner .winner-label {
             font-size: 12px;
-            color: #64748b;
+            color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
@@ -1689,7 +1879,7 @@
         .summary-winner .winner-name {
             font-size: 18px;
             font-weight: 700;
-            color: #a5b4fc;
+            color: var(--accent-text);
             margin-top: 4px;
         }
 
@@ -1703,8 +1893,8 @@
         .summary-table th {
             padding: 8px 10px;
             text-align: center;
-            color: #94a3b8;
-            border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--card-border);
             font-weight: 600;
             font-size: 11px;
             text-transform: uppercase;
@@ -1714,22 +1904,22 @@
         .summary-table td {
             padding: 8px 10px;
             text-align: center;
-            color: #cbd5e1;
-            border-bottom: 1px solid rgba(99, 102, 241, 0.08);
+            color: var(--text-highlight);
+            border-bottom: 1px solid var(--dashboard-border);
         }
 
         .summary-table td.metric-name {
             text-align: left;
             font-weight: 600;
-            color: #a5b4fc;
+            color: var(--accent-text);
         }
 
         .summary-table .winner-cell {
             font-weight: 600;
         }
 
-        .summary-table .positive { color: #6ee7b7; }
-        .summary-table .negative { color: #fca5a5; }
+        .summary-table .positive { color: var(--success-text); }
+        .summary-table .negative { color: var(--error-text); }
 
         .longevity-cards {
             display: grid;
@@ -1739,16 +1929,16 @@
         }
 
         .longevity-card {
-            background: rgba(30, 41, 59, 0.5);
+            background: var(--card-bg-alt);
             border-radius: 8px;
             padding: 12px;
-            border: 1px solid rgba(99, 102, 241, 0.1);
+            border: 1px solid var(--dashboard-border);
         }
 
         .longevity-card-title {
             font-size: 12px;
             font-weight: 600;
-            color: #94a3b8;
+            color: var(--text-secondary);
             margin-bottom: 8px;
         }
 
@@ -1756,20 +1946,20 @@
             display: flex;
             justify-content: space-between;
             font-size: 12px;
-            color: #cbd5e1;
+            color: var(--text-highlight);
             padding: 3px 0;
         }
 
         .longevity-stat .stat-label {
-            color: #64748b;
+            color: var(--text-muted);
         }
 
         .longevity-stat .stat-value {
             font-weight: 600;
         }
 
-        .longevity-stat .stat-value.good { color: #6ee7b7; }
-        .longevity-stat .stat-value.bad { color: #fca5a5; }
+        .longevity-stat .stat-value.good { color: var(--success-text); }
+        .longevity-stat .stat-value.bad { color: var(--error-text); }
 
         /* MoE Subtype dropdown */
         .moe-subtype-row {
@@ -1782,7 +1972,13 @@
     <div class="header">
         <div class="header-icon">📊</div>
         <h1>Model Monitoring Dashboard</h1>
-        <span class="header-subtitle">IDH Prediction Model · Performance & Drift Analysis</span>
+        <div class="header-right">
+            <a href="{% url 'monitoring:dashboard' %}" class="nav-link active">📊 Dashboard</a>
+            <a href="{% url 'monitoring:retrain' %}" class="nav-link">🔄 Retrain</a>
+            <button type="button" class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()" title="切換深色/淺色模式">
+                <span id="theme-icon">☀️</span>
+            </button>
+        </div>
     </div>
 
     <!-- Main Content -->
@@ -1901,11 +2097,11 @@
                                 <div class="form-group moe-subtype-row">
                                     <label>MoE 架構子類型</label>
                                     <select name="single_moe_subtype" id="id_single_moe_subtype" class="form-control">
-                                        <option value="optuna">Optuna (Meta-Learner + Experts)</option>
+                                        <option value="optuna">Meta Model (Meta-Learner + Experts)</option>
                                         <option value="standard">Standard (Router + Experts)</option>
                                         <option value="custom">Custom (單一預打包 .joblib)</option>
                                     </select>
-                                    <div class="help-text">Optuna: 有 Meta-Learner 的架構。Standard: Router 權重加權 Expert。Custom: 已包裝為單一檔案。</div>
+                                    <div class="help-text">Meta Model: 有 Meta-Learner 的架構。Standard: Router 權重加權 Expert。Custom: 已包裝為單一檔案。</div>
                                 </div>
                                 <!-- Optuna/Standard fields -->
                                 <div id="single-moe-component-fields">
@@ -2002,7 +2198,7 @@
                                 <div class="form-group moe-subtype-row">
                                     <label>MoE 架構</label>
                                     <select name="m1_moe_subtype" id="id_m1_moe_subtype" class="form-control">
-                                        <option value="optuna">Optuna</option>
+                                        <option value="optuna">Meta Model</option>
                                         <option value="standard">Standard (Router)</option>
                                         <option value="custom">Custom (單一檔案)</option>
                                     </select>
@@ -2073,7 +2269,7 @@
                                 <div class="form-group moe-subtype-row">
                                     <label>MoE 架構</label>
                                     <select name="m2_moe_subtype" id="id_m2_moe_subtype" class="form-control">
-                                        <option value="optuna">Optuna</option>
+                                        <option value="optuna">Meta Model</option>
                                         <option value="standard">Standard (Router)</option>
                                         <option value="custom">Custom (單一檔案)</option>
                                     </select>
@@ -2379,7 +2575,7 @@
                             <button type="button" class="report-tab-btn active" onclick="switchReportTab('overview', this)">總覽</button>
                             <button type="button" class="report-tab-btn" onclick="switchReportTab('aging', this)">老化指標</button>
                             <button type="button" class="report-tab-btn" onclick="switchReportTab('analysis', this)">分析與建議</button>
-                            <button type="button" class="report-tab-btn" onclick="switchReportTab('longevity', this)">壽命分析</button>
+                            <button type="button" class="report-tab-btn" onclick="switchReportTab('longevity', this)">模型壽命分析</button>
                         </div>
 
                         <!-- ========== TAB 1: 總覽 ========== -->
@@ -2494,7 +2690,7 @@
                             {% endif %}
                         </div>
 
-                        <!-- ========== TAB 4: 壽命分析 ========== -->
+                        <!-- ========== TAB 4: 模型壽命分析 ========== -->
                         <div id="report-tab-longevity" class="report-tab-panel">
                             {% if longevity_a %}
                             <div id="longevity-config-a" class="window-config-panel active">
@@ -2559,7 +2755,7 @@
                             </div>
                             {% endif %}
                             {% if not longevity_a and not longevity_b %}
-                            <div style="color: #64748b; font-size: 13px; padding: 20px 0;">資料不足，無法進行壽命分析。</div>
+                            <div style="color: #64748b; font-size: 13px; padding: 20px 0;">資料不足，無法進行模型壽命分析。</div>
                             {% endif %}
                         </div>
 
@@ -2928,13 +3124,18 @@
                         <script>
                             // Render main comparison chart
                             var compMainData = {{ comparison_figure_json|safe }};
+                            compMainData.layout.paper_bgcolor = 'rgba(0,0,0,0)';
+                            compMainData.layout.plot_bgcolor = 'rgba(0,0,0,0)';
                             Plotly.newPlot('comp-main-chart', compMainData.data, compMainData.layout, {responsive: true});
 
                             {% if comparison_warning_json %}
                             // Render warning chart
                             var compWarningData = {{ comparison_warning_json|safe }};
+                            compWarningData.layout.paper_bgcolor = 'rgba(0,0,0,0)';
+                            compWarningData.layout.plot_bgcolor = 'rgba(0,0,0,0)';
                             Plotly.newPlot('comp-warning-chart', compWarningData.data, compWarningData.layout, {responsive: true});
                             {% endif %}
+                            if (typeof applyPlotlyTheme === 'function') applyPlotlyTheme();
 
                             // Toggle chart visibility
                             function toggleCompChart(chartId, btn) {
@@ -2999,6 +3200,8 @@
                 <script>
                     // Config A chart
                     var figureDataA = {{ figure_json_a|safe }};
+                    figureDataA.layout.paper_bgcolor = 'rgba(0,0,0,0)';
+                    figureDataA.layout.plot_bgcolor = 'rgba(0,0,0,0)';
                     Plotly.newPlot('plotly-chart-a', figureDataA.data, figureDataA.layout, {
                         responsive: true, displayModeBar: true, scrollZoom: true
                     });
@@ -3006,10 +3209,13 @@
                     // Config B chart (if available)
                     {% if figure_json_b %}
                     var figureDataB = {{ figure_json_b|safe }};
+                    figureDataB.layout.paper_bgcolor = 'rgba(0,0,0,0)';
+                    figureDataB.layout.plot_bgcolor = 'rgba(0,0,0,0)';
                     Plotly.newPlot('plotly-chart-b', figureDataB.data, figureDataB.layout, {
                         responsive: true, displayModeBar: true, scrollZoom: true
                     });
                     {% endif %}
+                    if (typeof applyPlotlyTheme === 'function') applyPlotlyTheme();
 
                     // Toggle trace visibility
                     function toggleTrace(checkbox) {
@@ -3224,7 +3430,7 @@
                 <span class="fi-label">斜率穩定度</span>
                 <span class="fi-desc">AUPRC 加權趨勢斜率接近 0 的程度（越穩定越高）</span>
             </div>
-            <p style="margin: 12px 0 0; font-size: 12px; color: #94a3b8;">
+            <p style="margin: 12px 0 0; font-size: 12px; color: var(--text-secondary);">
                 壽命等級由最近 5 個窗口的通過狀況決定：<br>
                 全部通過 → 穩定 ｜ ≥60% 通過 → 觀察<br>
                 部分通過 → 警示 ｜ 全未通過 → 失效
@@ -3233,5 +3439,80 @@
         <button type="button" class="health-popup-close" onclick="document.getElementById('health-popup').classList.remove('show')">關閉</button>
     </div>
 </div>
+
+<!-- Theme Toggle Script -->
+<script>
+    // === Theme Toggling ===
+    (function() {
+        var html = document.documentElement;
+        var saved = localStorage.getItem('dashboard-theme');
+        if (saved) {
+            html.setAttribute('data-theme', saved);
+        }
+        // Update icon on load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateThemeIcon();
+            applyPlotlyTheme();
+        });
+    })();
+
+    function updateThemeIcon() {
+        var theme = document.documentElement.getAttribute('data-theme');
+        var icon = document.getElementById('theme-icon');
+        if (icon) {
+            icon.textContent = theme === 'light' ? '🌙' : '☀️';
+        }
+    }
+
+    function toggleTheme() {
+        var html = document.documentElement;
+        var current = html.getAttribute('data-theme') || 'dark';
+        var next = current === 'dark' ? 'light' : 'dark';
+        html.setAttribute('data-theme', next);
+        localStorage.setItem('dashboard-theme', next);
+        updateThemeIcon();
+        applyPlotlyTheme();
+    }
+
+    function applyPlotlyTheme() {
+        var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+        var isLight = theme === 'light';
+
+        var fontColor = isLight ? '#475569' : '#94a3b8';
+        var gridColor = isLight ? 'rgba(79,70,229,0.08)' : 'rgba(99,102,241,0.08)';
+        var paperBg = 'rgba(0,0,0,0)';
+        var plotBg = 'rgba(0,0,0,0)';
+
+        var chartIds = ['plotly-chart-a', 'plotly-chart-b', 'comp-main-chart', 'comp-warning-chart'];
+        chartIds.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el || !el.data) return;
+
+            var layoutUpdate = {
+                paper_bgcolor: paperBg,
+                plot_bgcolor: plotBg,
+                font: { color: fontColor }
+            };
+
+            // Update all axes
+            var axisKeys = Object.keys(el.layout || {}).filter(function(k) {
+                return k.match(/^[xy]axis/);
+            });
+            axisKeys.forEach(function(key) {
+                layoutUpdate[key + '.tickfont.color'] = fontColor;
+                layoutUpdate[key + '.titlefont.color'] = fontColor;
+                layoutUpdate[key + '.gridcolor'] = gridColor;
+                layoutUpdate[key + '.zerolinecolor'] = gridColor;
+            });
+
+            // Update legend
+            layoutUpdate['legend.font.color'] = fontColor;
+
+            try {
+                Plotly.relayout(id, layoutUpdate);
+            } catch(e) { /* chart not ready */ }
+        });
+    }
+</script>
 </body>
 </html>

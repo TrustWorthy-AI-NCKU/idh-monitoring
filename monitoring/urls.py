@@ -9,5 +9,8 @@ app_name = 'monitoring'
 urlpatterns = [
     path('', views.dashboard_view, name='dashboard'),
     path('reset/', views.reset_view, name='reset'),
+    path('retrain/', views.retrain_view, name='retrain'),
+    path('retrain/download/<str:model_key>/', views.retrain_download_view, name='retrain_download'),
+    path('retrain/download_data/<str:data_key>/', views.retrain_data_download_view, name='retrain_data_download'),
     path('django_plotly_dash/', include('django_plotly_dash.urls')),
 ]

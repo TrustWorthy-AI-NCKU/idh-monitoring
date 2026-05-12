@@ -5,9 +5,11 @@ import os
 import json
 import logging
 import tempfile
+import shutil
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.core.cache import cache
+from django.http import HttpResponse, Http404
 import plotly.utils
 
 from .forms import MonitoringForm
@@ -594,10 +596,101 @@ def dashboard_view(request):
                     logger.error(f"[dashboard] comparison figure failed: {e}")
                     moe_metrics = {'error': str(e)}
 
+    # =============================================
+    # Overview Indicators (traffic-light summary)
+    # =============================================
+    overview_indicators = []
+    if monthly_report_a and not monthly_report_a.get('basic_info', {}).get('error'):
+        # 1. AUPRC — from safety_gates
+        for g in monthly_report_a.get('safety_gates', []):
+            if g['metric'] == 'AUPRC':
+                auprc_val = g['value']
+                if auprc_val >= 0.50:
+                    ov_status = 'green'
+                elif auprc_val >= 0.35:
+                    ov_status = 'yellow'
+                else:
+                    ov_status = 'red'
+                overview_indicators.append({
+                    'key': 'auprc', 'label': '表現',
+                    'metric': 'AUPRC', 'value': auprc_val,
+                    'status': ov_status,
+                    'desc': f'模型整體預測效能。越高越好（門檻 {g["threshold"]}）。',
+                })
+                break
+
+        # 2. Sensitivity — from safety_gates
+        for g in monthly_report_a.get('safety_gates', []):
+            if g['metric'] == 'Sensitivity':
+                sens_val = g['value']
+                if sens_val >= 0.75:
+                    ov_status = 'green'
+                elif sens_val >= 0.60:
+                    ov_status = 'yellow'
+                else:
+                    ov_status = 'red'
+                overview_indicators.append({
+                    'key': 'sensitivity', 'label': '正確召回率',
+                    'metric': 'Sensitivity', 'value': sens_val,
+                    'status': ov_status,
+                    'desc': f'偵測正例（IDH 發生）的能力（門檻 {g["threshold"]}）。',
+                })
+                break
+
+        # 3. JS Divergence — from additional
+        js_val = monthly_report_a.get('additional', {}).get('JS_divergence')
+        if js_val is not None:
+            if js_val < 0.10:
+                ov_status = 'green'
+            elif js_val < 0.25:
+                ov_status = 'yellow'
+            else:
+                ov_status = 'red'
+            overview_indicators.append({
+                'key': 'js_div', 'label': '老化-資料飄移',
+                'metric': 'JS Divergence', 'value': js_val,
+                'status': ov_status,
+                'desc': '輸入資料與訓練基準的分布差異。越低越穩定。',
+            })
+
+        # 4. ECE — from additional
+        ece_val = monthly_report_a.get('additional', {}).get('ECE')
+        if ece_val is not None:
+            if ece_val < 0.10:
+                ov_status = 'green'
+            elif ece_val < 0.20:
+                ov_status = 'yellow'
+            else:
+                ov_status = 'red'
+            overview_indicators.append({
+                'key': 'ece', 'label': '老化-預測信心',
+                'metric': 'ECE', 'value': ece_val,
+                'status': ov_status,
+                'desc': '模型預測機率與實際結果的校準誤差。越低越可靠。',
+            })
+
+        # 5. Health Score — from longevity_a
+        if longevity_a and longevity_a.get('health_score') is not None:
+            hs = longevity_a['health_score']
+            if hs >= 70:
+                ov_status = 'green'
+            elif hs >= 40:
+                ov_status = 'yellow'
+            else:
+                ov_status = 'red'
+            overview_indicators.append({
+                'key': 'health', 'label': '模型健康分數',
+                'metric': '健康分數', 'value': hs,
+                'status': ov_status,
+                'desc': '綜合達標率、連續達標比和趨勢穩定度的整體評分（0~100）。',
+            })
+
     context = {
         'form': form,
         'has_data': has_data,
         'uploaded_files': uploaded_files,
+        # Overview indicators
+        'overview_indicators': overview_indicators,
         # Dual window config
         'figure_json_a': figure_json_a,
         'figure_json_b': figure_json_b,
@@ -622,3 +715,202 @@ def dashboard_view(request):
         'longevity_metrics': longevity_metrics,
     }
     return render(request, 'monitoring/dashboard.html', context)
+
+
+RETRAIN_CACHE_KEY = 'retrain_pipeline_result'
+RETRAIN_CACHE_TIMEOUT = 7200  # 2 hours
+
+
+def retrain_view(request):
+    """Model retrain pipeline view."""
+    has_result = cache.get(RETRAIN_CACHE_KEY) is not None
+
+    if request.method == 'POST':
+        cache.delete(RETRAIN_CACHE_KEY)
+        has_result = False
+
+        data_file = request.FILES.get('data_file')
+        features_str = request.POST.get('features', '').strip()
+        target_col = request.POST.get('target_col', 'Nadir90/100').strip()
+
+        new_data_start_date = request.POST.get('new_data_start_date', '').strip()
+        if not new_data_start_date:
+            new_data_start_date = None
+
+        ver1_model_file = request.FILES.get('ver1_model')
+
+        if not data_file:
+            messages.error(request, '請上傳 Dataset (.csv) 檔案。')
+            return redirect('monitoring:retrain')
+
+        if not features_str:
+            messages.error(request, '請填入 Features 欄位。')
+            return redirect('monitoring:retrain')
+
+        features = [f.strip() for f in features_str.split(',') if f.strip()]
+
+        temp_dir = tempfile.mkdtemp()
+
+        try:
+            data_path = os.path.join(temp_dir, data_file.name)
+            with open(data_path, 'wb') as f:
+                for chunk in data_file.chunks():
+                    f.write(chunk)
+
+            from .retrain_service import (
+                run_retrain_pipeline,
+                build_drift_chart,
+                build_shape_comparison_figures,
+                build_scan_chart,
+            )
+
+            ver1_model = None
+            model_name = 'Unknown'
+            if ver1_model_file:
+                import joblib
+                model_name = ver1_model_file.name
+                ver1_path = os.path.join(temp_dir, ver1_model_file.name)
+                with open(ver1_path, 'wb') as f:
+                    for chunk in ver1_model_file.chunks():
+                        f.write(chunk)
+                try:
+                    ver1_model = joblib.load(ver1_path)
+                except Exception as e:
+                    messages.error(request, f'無法載入模型檔案: {e}')
+                    return redirect('monitoring:retrain')
+            else:
+                model_name = '重新訓練 (From Scratch)'
+
+            data_name = data_file.name
+            drift_threshold_mode = request.POST.get('drift_threshold_mode', 'fixed')
+            scan_mode = request.POST.get('scan_mode') == 'on'
+
+            result = run_retrain_pipeline(
+                csv_path=data_path,
+                features=features,
+                target_col=target_col,
+                ver1_model=ver1_model,
+                ver1_end_date=new_data_start_date,
+                model_name=model_name,
+                data_name=data_name,
+                drift_threshold_mode=drift_threshold_mode,
+                scan_mode=scan_mode,
+            )
+
+            if result['success']:
+                charts = {}
+
+                # Scan chart (AUPRC timeline with T0/T1 highlights)
+                if result.get('scan_results') and result.get('segments'):
+                    scan_fig = build_scan_chart(result['scan_results'], result['segments'])
+                    if scan_fig:
+                        charts['scan'] = json.dumps(scan_fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+                # Drift chart
+                drift_fig = build_drift_chart(
+                    result.get('data_drift', {}).get('per_feature', {}),
+                    adaptive_thresholds=result.get('drift_thresholds'),
+                    threshold_mode=result.get('drift_threshold_mode', 'fixed'),
+                )
+                if drift_fig:
+                    charts['drift'] = json.dumps(drift_fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+                # Shape function charts
+                shape_figs = build_shape_comparison_figures(
+                    result.get('shape_functions', []),
+                )
+                shape_jsons = []
+                for sf in shape_figs:
+                    shape_jsons.append({
+                        'name': sf['name'],
+                        'json': json.dumps(sf['figure'], cls=plotly.utils.PlotlyJSONEncoder),
+                    })
+                charts['shapes'] = shape_jsons
+
+                # Save models for download (using joblib in temp)
+                import joblib
+                model_dir = os.path.join(temp_dir, 'models')
+                os.makedirs(model_dir, exist_ok=True)
+
+                if result.get('_ver1'):
+                    ver1_path = os.path.join(model_dir, 'ver1.joblib')
+                    joblib.dump(result['_ver1'], ver1_path)
+                if result.get('_ver2'):
+                    ver2_path = os.path.join(model_dir, 'ver2.joblib')
+                    joblib.dump(result['_ver2'], ver2_path)
+
+                # Remove internal model objects before caching (not serializable)
+                cache_result = {k: v for k, v in result.items() if not k.startswith('_')}
+                cache_result['charts'] = charts
+                cache_result['model_dir'] = model_dir
+                cache_result['_temp_dir'] = temp_dir  # Keep temp dir alive
+
+                cache.set(RETRAIN_CACHE_KEY, cache_result, RETRAIN_CACHE_TIMEOUT)
+                messages.success(request, f'Pipeline 完成！耗時 {result["elapsed_s"]}s')
+            else:
+                messages.error(request, f'Pipeline 失敗：{result.get("error", "未知錯誤")}')
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        except Exception as e:
+            logger.exception(f"[retrain] Unhandled error: {e}")
+            messages.error(request, f'系統錯誤：{str(e)}')
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        return redirect('monitoring:retrain')
+
+    # GET: Render page
+    cached = cache.get(RETRAIN_CACHE_KEY)
+
+    context = {
+        'has_result': cached is not None,
+        'result': cached,
+    }
+    return render(request, 'monitoring/retrain.html', context)
+
+
+def retrain_download_view(request, model_key):
+    """Download a trained model file."""
+    cached = cache.get(RETRAIN_CACHE_KEY)
+    if not cached:
+        raise Http404('No retrain results found.')
+
+    model_dir = cached.get('model_dir')
+    if not model_dir:
+        raise Http404('Model directory not found.')
+
+    valid_keys = {'ver1': 'ver1.joblib', 'ver2': 'ver2.joblib', 'ver1_edited': 'ver1_edited.joblib'}
+    if model_key not in valid_keys:
+        raise Http404('Invalid model key.')
+
+    filepath = os.path.join(model_dir, valid_keys[model_key])
+    if not os.path.exists(filepath):
+        raise Http404('Model file not found.')
+
+    with open(filepath, 'rb') as f:
+        response = HttpResponse(f.read(), content_type='application/octet-stream')
+        response['Content-Disposition'] = f'attachment; filename="{valid_keys[model_key]}"'
+        return response
+
+
+def retrain_data_download_view(request, data_key):
+    """Download a saved data segment (T0 or T1)."""
+    cached = cache.get(RETRAIN_CACHE_KEY)
+    if not cached:
+        raise Http404('No retrain results found.')
+
+    saved_segments = cached.get('saved_segments')
+    if not saved_segments:
+        raise Http404('No saved segments found.')
+
+    valid_keys = {'t0': 't0_path', 't1': 't1_path'}
+    if data_key not in valid_keys:
+        raise Http404('Invalid data key.')
+
+    filepath = saved_segments.get(valid_keys[data_key])
+    if not filepath or not os.path.exists(filepath):
+        raise Http404('Data file not found.')
+
+    with open(filepath, 'rb') as f:
+        response = HttpResponse(f.read(), content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="{os.path.basename(filepath)}"'
+        return response
