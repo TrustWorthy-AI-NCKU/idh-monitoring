@@ -733,9 +733,13 @@ def retrain_view(request):
         features_str = request.POST.get('features', '').strip()
         target_col = request.POST.get('target_col', 'Nadir90/100').strip()
 
-        new_data_start_date = request.POST.get('new_data_start_date', '').strip()
-        if not new_data_start_date:
-            new_data_start_date = None
+        ver1_start_date = request.POST.get('ver1_start_date', '').strip()
+        if not ver1_start_date:
+            ver1_start_date = None
+
+        ver1_end_date = request.POST.get('ver1_end_date', '').strip()
+        if not ver1_end_date:
+            ver1_end_date = None
 
         ver1_model_file = request.FILES.get('ver1_model')
 
@@ -783,26 +787,61 @@ def retrain_view(request):
 
             data_name = data_file.name
             drift_threshold_mode = request.POST.get('drift_threshold_mode', 'fixed')
-            scan_mode = request.POST.get('scan_mode') == 'on'
+            window_mode = request.POST.get('window_selection_mode', 'auto_scan')
+            scan_mode = window_mode in ['auto_scan', 'best_vs_worst']
 
             result = run_retrain_pipeline(
                 csv_path=data_path,
                 features=features,
                 target_col=target_col,
                 ver1_model=ver1_model,
-                ver1_end_date=new_data_start_date,
+                ver1_start_date=ver1_start_date,
+                ver1_end_date=ver1_end_date,
                 model_name=model_name,
                 data_name=data_name,
                 drift_threshold_mode=drift_threshold_mode,
                 scan_mode=scan_mode,
             )
 
+            if result['success'] and window_mode == 'best_vs_worst' and result.get('scan_results'):
+                from .retrain_service import detect_best_worst_segments
+                seg_months_str = request.POST.get('segment_months', '6').strip()
+                try:
+                    seg_months = max(2, min(24, int(seg_months_str)))
+                except (ValueError, TypeError):
+                    seg_months = 6
+
+                bw_segments = detect_best_worst_segments(result['scan_results'], segment_months=seg_months)
+                if bw_segments:
+                    result = run_retrain_pipeline(
+                        csv_path=data_path,
+                        features=features,
+                        target_col=target_col,
+                        scan_mode=True,
+                        drift_threshold_mode=drift_threshold_mode,
+                        manual_t0_start=bw_segments['t0_date_start'],
+                        manual_t0_end=bw_segments['t0_date_end'],
+                        cached_scan_results=result['scan_results'],
+                    )
+                    if result['success']:
+                        result['segments'] = bw_segments
+                        result['best_vs_worst'] = True
+                        if 'data_info' in result:
+                            result['data_info']['t0_period'] = f"{bw_segments['t0_date_start']} ~ {bw_segments['t0_date_end']}"
+                            result['data_info']['t1_period'] = f"{bw_segments['t1_date_start']} ~ {bw_segments['t1_date_end']}"
+
             if result['success']:
                 charts = {}
 
                 # Scan chart (AUPRC timeline with T0/T1 highlights)
                 if result.get('scan_results') and result.get('segments'):
-                    scan_fig = build_scan_chart(result['scan_results'], result['segments'])
+                    scan_fig = build_scan_chart(
+                        result['scan_results'],
+                        result['segments'],
+                        baseline_auprc=result.get('baseline_auprc'),
+                        drift_thresholds=result.get('drift_thresholds'),
+                        threshold_mode=result.get('drift_threshold_mode', 'fixed'),
+                    )
                     if scan_fig:
                         charts['scan'] = json.dumps(scan_fig, cls=plotly.utils.PlotlyJSONEncoder)
 
@@ -819,12 +858,17 @@ def retrain_view(request):
                 shape_figs = build_shape_comparison_figures(
                     result.get('shape_functions', []),
                 )
+                raw_shapes = result.get('shape_functions', [])
                 shape_jsons = []
-                for sf in shape_figs:
-                    shape_jsons.append({
+                for i, sf in enumerate(shape_figs):
+                    entry = {
                         'name': sf['name'],
                         'json': json.dumps(sf['figure'], cls=plotly.utils.PlotlyJSONEncoder),
-                    })
+                    }
+                    # Attach Spearman ρ from raw shape data
+                    if i < len(raw_shapes) and raw_shapes[i].get('spearman_rho') is not None:
+                        entry['spearman_rho'] = raw_shapes[i]['spearman_rho']
+                    shape_jsons.append(entry)
                 charts['shapes'] = shape_jsons
 
                 # Save models for download (using joblib in temp)
@@ -844,6 +888,10 @@ def retrain_view(request):
                 cache_result['charts'] = charts
                 cache_result['model_dir'] = model_dir
                 cache_result['_temp_dir'] = temp_dir  # Keep temp dir alive
+                # Cache params for re-analysis
+                cache_result['_csv_path'] = data_path
+                cache_result['_features'] = features
+                cache_result['_target_col'] = target_col
 
                 cache.set(RETRAIN_CACHE_KEY, cache_result, RETRAIN_CACHE_TIMEOUT)
                 messages.success(request, f'Pipeline 完成！耗時 {result["elapsed_s"]}s')
@@ -914,3 +962,250 @@ def retrain_data_download_view(request, data_key):
         response = HttpResponse(f.read(), content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="{os.path.basename(filepath)}"'
         return response
+
+
+def retrain_reanalyze_view(request):
+    """Re-run drift analysis with user-specified manual T0 range."""
+    if request.method != 'POST':
+        return redirect('monitoring:retrain')
+
+    cached = cache.get(RETRAIN_CACHE_KEY)
+    if not cached:
+        messages.error(request, '快取已過期，請重新上傳資料。')
+        return redirect('monitoring:retrain')
+
+    csv_path = cached.get('_csv_path')
+    features = cached.get('_features')
+    target_col = cached.get('_target_col')
+    scan_results = cached.get('scan_results')
+
+    if not csv_path or not os.path.exists(csv_path):
+        messages.error(request, '原始資料檔案已不存在，請重新上傳。')
+        return redirect('monitoring:retrain')
+
+    manual_t0_start = request.POST.get('manual_t0_start', '').strip()
+    manual_t0_end = request.POST.get('manual_t0_end', '').strip()
+
+    if not manual_t0_start or not manual_t0_end:
+        messages.error(request, '請指定 T0 開始與結束日期。')
+        return redirect('monitoring:retrain')
+
+    try:
+        from .retrain_service import (
+            run_retrain_pipeline,
+            build_drift_chart,
+            build_shape_comparison_figures,
+            build_scan_chart,
+        )
+
+        drift_threshold_mode = cached.get('drift_threshold_mode', 'fixed')
+
+        result = run_retrain_pipeline(
+            csv_path=csv_path,
+            features=features,
+            target_col=target_col,
+            scan_mode=True,
+            drift_threshold_mode=drift_threshold_mode,
+            manual_t0_start=manual_t0_start,
+            manual_t0_end=manual_t0_end,
+            cached_scan_results=scan_results,
+        )
+
+        if result['success']:
+            charts = {}
+
+            # Scan chart
+            if result.get('scan_results') and result.get('segments'):
+                scan_fig = build_scan_chart(result['scan_results'], result['segments'])
+                if scan_fig:
+                    charts['scan'] = json.dumps(scan_fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+            # Drift chart
+            drift_fig = build_drift_chart(
+                result.get('data_drift', {}).get('per_feature', {}),
+                adaptive_thresholds=result.get('drift_thresholds'),
+                threshold_mode=result.get('drift_threshold_mode', 'fixed'),
+            )
+            if drift_fig:
+                charts['drift'] = json.dumps(drift_fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+            # Shape function charts
+            shape_figs = build_shape_comparison_figures(
+                result.get('shape_functions', []),
+            )
+            raw_shapes = result.get('shape_functions', [])
+            shape_jsons = []
+            for i, sf in enumerate(shape_figs):
+                entry = {
+                    'name': sf['name'],
+                    'json': json.dumps(sf['figure'], cls=plotly.utils.PlotlyJSONEncoder),
+                }
+                if i < len(raw_shapes) and raw_shapes[i].get('spearman_rho') is not None:
+                    entry['spearman_rho'] = raw_shapes[i]['spearman_rho']
+                shape_jsons.append(entry)
+            charts['shapes'] = shape_jsons
+
+            # Save models
+            temp_dir = cached.get('_temp_dir', os.path.dirname(csv_path))
+            import joblib
+            model_dir = os.path.join(temp_dir, 'models')
+            os.makedirs(model_dir, exist_ok=True)
+            if result.get('_ver1'):
+                joblib.dump(result['_ver1'], os.path.join(model_dir, 'ver1.joblib'))
+            if result.get('_ver2'):
+                joblib.dump(result['_ver2'], os.path.join(model_dir, 'ver2.joblib'))
+
+            cache_result = {k: v for k, v in result.items() if not k.startswith('_')}
+            cache_result['charts'] = charts
+            cache_result['model_dir'] = model_dir
+            cache_result['_temp_dir'] = temp_dir
+            cache_result['_csv_path'] = csv_path
+            cache_result['_features'] = features
+            cache_result['_target_col'] = target_col
+
+            cache.set(RETRAIN_CACHE_KEY, cache_result, RETRAIN_CACHE_TIMEOUT)
+            messages.success(request, f'手動 T0 重新分析完成！耗時 {result["elapsed_s"]}s')
+        else:
+            messages.error(request, f'重新分析失敗：{result.get("error", "未知錯誤")}')
+
+    except Exception as e:
+        logger.exception(f"[retrain-reanalyze] Error: {e}")
+        messages.error(request, f'系統錯誤：{str(e)}')
+
+    return redirect('monitoring:retrain')
+
+
+def retrain_best_worst_view(request):
+    """Re-run drift analysis comparing globally best vs worst AUPRC segments."""
+    if request.method != 'POST':
+        return redirect('monitoring:retrain')
+
+    cached = cache.get(RETRAIN_CACHE_KEY)
+    if not cached:
+        messages.error(request, '快取已過期，請重新上傳資料。')
+        return redirect('monitoring:retrain')
+
+    csv_path = cached.get('_csv_path')
+    features = cached.get('_features')
+    target_col = cached.get('_target_col')
+    scan_results = cached.get('scan_results')
+
+    if not csv_path or not os.path.exists(csv_path):
+        messages.error(request, '原始資料檔案已不存在，請重新上傳。')
+        return redirect('monitoring:retrain')
+
+    if not scan_results:
+        messages.error(request, '無掃描結果，請先執行 Scan Mode。')
+        return redirect('monitoring:retrain')
+
+    try:
+        from .retrain_service import (
+            run_retrain_pipeline,
+            build_drift_chart,
+            build_shape_comparison_figures,
+            build_scan_chart,
+            detect_best_worst_segments,
+        )
+
+        # Find best and worst segments
+        seg_months_str = request.POST.get('segment_months', '6').strip()
+        try:
+            seg_months = max(2, min(24, int(seg_months_str)))
+        except (ValueError, TypeError):
+            seg_months = 6
+
+        segments = detect_best_worst_segments(scan_results, segment_months=seg_months)
+        if not segments:
+            messages.error(request, '無法偵測最佳/最差區段（資料窗格不足）。')
+            return redirect('monitoring:retrain')
+
+        # Use best segment dates as T0, worst as T1
+        drift_threshold_mode = cached.get('drift_threshold_mode', 'fixed')
+
+        result = run_retrain_pipeline(
+            csv_path=csv_path,
+            features=features,
+            target_col=target_col,
+            scan_mode=True,
+            drift_threshold_mode=drift_threshold_mode,
+            manual_t0_start=segments['t0_date_start'],
+            manual_t0_end=segments['t0_date_end'],
+            cached_scan_results=scan_results,
+        )
+
+        if result['success']:
+            # Override segments with best-vs-worst info
+            result['segments'] = segments
+            result['best_vs_worst'] = True
+
+            # Fix data_info to reflect actual Best/Worst segment dates
+            if 'data_info' in result:
+                result['data_info']['t0_period'] = f"{segments['t0_date_start']} ~ {segments['t0_date_end']}"
+                result['data_info']['t1_period'] = f"{segments['t1_date_start']} ~ {segments['t1_date_end']}"
+
+            charts = {}
+
+            # Scan chart (with best/worst highlighting)
+            scan_fig = build_scan_chart(scan_results, segments)
+            if scan_fig:
+                charts['scan'] = json.dumps(scan_fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+            # Drift chart
+            drift_fig = build_drift_chart(
+                result.get('data_drift', {}).get('per_feature', {}),
+                adaptive_thresholds=result.get('drift_thresholds'),
+                threshold_mode=result.get('drift_threshold_mode', 'fixed'),
+            )
+            if drift_fig:
+                charts['drift'] = json.dumps(drift_fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+            # Shape function charts
+            shape_figs = build_shape_comparison_figures(
+                result.get('shape_functions', []),
+            )
+            raw_shapes = result.get('shape_functions', [])
+            shape_jsons = []
+            for i, sf in enumerate(shape_figs):
+                entry = {
+                    'name': sf['name'],
+                    'json': json.dumps(sf['figure'], cls=plotly.utils.PlotlyJSONEncoder),
+                }
+                if i < len(raw_shapes) and raw_shapes[i].get('spearman_rho') is not None:
+                    entry['spearman_rho'] = raw_shapes[i]['spearman_rho']
+                shape_jsons.append(entry)
+            charts['shapes'] = shape_jsons
+
+            # Save models
+            temp_dir = cached.get('_temp_dir', os.path.dirname(csv_path))
+            import joblib
+            model_dir = os.path.join(temp_dir, 'models')
+            os.makedirs(model_dir, exist_ok=True)
+            if result.get('_ver1'):
+                joblib.dump(result['_ver1'], os.path.join(model_dir, 'ver1.joblib'))
+            if result.get('_ver2'):
+                joblib.dump(result['_ver2'], os.path.join(model_dir, 'ver2.joblib'))
+
+            cache_result = {k: v for k, v in result.items() if not k.startswith('_')}
+            cache_result['charts'] = charts
+            cache_result['model_dir'] = model_dir
+            cache_result['_temp_dir'] = temp_dir
+            cache_result['_csv_path'] = csv_path
+            cache_result['_features'] = features
+            cache_result['_target_col'] = target_col
+
+            cache.set(RETRAIN_CACHE_KEY, cache_result, RETRAIN_CACHE_TIMEOUT)
+
+            msg = (
+                f'Best vs Worst 分析完成！耗時 {result["elapsed_s"]}s — '
+                f'Best 均值: {segments["best_mean_auprc"]}, '
+                f'Worst 均值: {segments["worst_mean_auprc"]}'
+            )
+            messages.success(request, msg)
+        else:
+            messages.error(request, f'分析失敗：{result.get("error", "未知錯誤")}')
+
+    except Exception as e:
+        logger.exception(f"[retrain-best-worst] Error: {e}")
+        messages.error(request, f'系統錯誤：{str(e)}')
+
+    return redirect('monitoring:retrain')

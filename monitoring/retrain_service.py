@@ -187,12 +187,16 @@ def detect_auprc_segments(scan_results, min_t0_months=6, min_t1_months=3):
         return None
 
     auprc_vals = [r['auprc'] for r in scan_results]
-    peak = max(auprc_vals)
+    peak = max(auprc_vals)  # global peak — used for peak_auprc in return value
 
-    # Label each window
+    # Label each window using rolling LOCAL peak (±6 windows ≈ ±6 months)
+    local_half = 6  # look ±6 windows on each side
     labels = []
-    for val in auprc_vals:
-        pct_drop = (peak - val) / peak if peak > 0 else 0
+    for i, val in enumerate(auprc_vals):
+        lo = max(0, i - local_half)
+        hi = min(len(auprc_vals), i + local_half + 1)
+        local_peak = max(auprc_vals[lo:hi])
+        pct_drop = (local_peak - val) / local_peak if local_peak > 0 else 0
         if pct_drop > 0.30 or val < 0.30:
             labels.append('drop')
         elif pct_drop > 0.15 or val < 0.45:
@@ -296,6 +300,95 @@ def detect_auprc_segments(scan_results, min_t0_months=6, min_t1_months=3):
     }
 
 
+def detect_best_worst_segments(scan_results, segment_months=6):
+    """Find the globally best and worst AUPRC segments for drift comparison.
+    
+    Selects two non-overlapping consecutive runs:
+      - T0 (Best):  the consecutive block with the highest mean AUPRC
+      - T1 (Worst): the consecutive block with the lowest mean AUPRC
+    
+    Args:
+        scan_results: list of window dicts from scan_auprc_windows
+        segment_months: target length of each segment in months (~N windows with 30d stride)
+    
+    Returns:
+        dict with t0/t1 dates and labels, or None if insufficient data.
+    """
+    if not scan_results or len(scan_results) < 4:
+        return None
+
+    auprc_vals = [r['auprc'] for r in scan_results]
+    n = len(auprc_vals)
+    seg_len = max(2, segment_months)  # ~1 window per month with 30d stride
+
+    if seg_len > n // 2:
+        seg_len = max(2, n // 3)
+
+    # Sliding window mean AUPRC
+    best_start, best_mean = 0, -1
+    worst_start, worst_mean = 0, float('inf')
+
+    for i in range(n - seg_len + 1):
+        window = auprc_vals[i:i + seg_len]
+        m = sum(window) / len(window)
+        if m > best_mean:
+            best_mean = m
+            best_start = i
+        if m < worst_mean:
+            worst_mean = m
+            worst_start = i
+
+    best_end = best_start + seg_len - 1
+    worst_end = worst_start + seg_len - 1
+
+    # Ensure non-overlapping: if they overlap, shrink the one selected second
+    if not (best_end < worst_start or worst_end < best_start):
+        # They overlap — keep the best, re-find worst outside best range
+        worst_mean = float('inf')
+        worst_start = 0
+        for i in range(n - seg_len + 1):
+            if i + seg_len - 1 < best_start or i > best_end:
+                window = auprc_vals[i:i + seg_len]
+                m = sum(window) / len(window)
+                if m < worst_mean:
+                    worst_mean = m
+                    worst_start = i
+        worst_end = worst_start + seg_len - 1
+
+    # Build labels for chart coloring
+    labels = []
+    for i in range(n):
+        if best_start <= i <= best_end:
+            labels.append('high')
+        elif worst_start <= i <= worst_end:
+            labels.append('drop')
+        else:
+            labels.append('transition')
+
+    return {
+        'labels': labels,
+        't0_start_idx': best_start,
+        't0_end_idx': best_end,
+        't1_start_idx': worst_start,
+        't1_end_idx': worst_end,
+        't0_date_start': scan_results[best_start]['date_start'],
+        't0_date_end': scan_results[best_end]['date_end'],
+        't1_date_start': scan_results[worst_start]['date_start'],
+        't1_date_end': scan_results[worst_end]['date_end'],
+        't0_windows': seg_len,
+        't1_windows': seg_len,
+        'peak_auprc': max(auprc_vals),
+        'best_mean_auprc': round(best_mean, 4),
+        'worst_mean_auprc': round(worst_mean, 4),
+        'mode': 'best_vs_worst',
+        'drop_criteria': {
+            'warning_drop_pct': 0.15,
+            'critical_drop_pct': 0.30,
+            'warning_below': 0.45,
+            'critical_below': 0.30,
+        },
+    }
+
 def save_segment_data(df, segments, save_dir):
     """Save T0 and T1 data segments as CSV files."""
     import os
@@ -318,14 +411,46 @@ def save_segment_data(df, segments, save_dir):
             't0_rows': len(df_t0), 't1_rows': len(df_t1)}
 
 
-def build_scan_chart(scan_results, segments):
+def build_scan_chart(scan_results, segments, baseline_auprc=None,
+                     drift_thresholds=None, threshold_mode='fixed'):
     """Build AUPRC timeline chart with T0/T1 regions highlighted."""
     if not scan_results:
         return None
 
-    dates = [r['date_mid'] for r in scan_results]
+    dates = [
+        r.get('date_mid') or str(
+            (pd.Timestamp(r['date_start']) + (pd.Timestamp(r['date_end']) - pd.Timestamp(r['date_start'])) / 2).date()
+        )
+        for r in scan_results
+    ]
     auprcs = [r['auprc'] for r in scan_results]
-    labels = segments['labels'] if segments else ['high'] * len(dates)
+
+    # Use segment labels if available and length matches, otherwise derive from baseline or AUPRC values
+    raw_labels = segments['labels'] if segments else []
+    if len(raw_labels) == len(dates):
+        labels = raw_labels
+    elif baseline_auprc and baseline_auprc > 0:
+        # Manual mode: color relative to baseline
+        drop_thresh = baseline_auprc * 0.85
+        warn_thresh = baseline_auprc * 0.95
+        labels = []
+        for a in auprcs:
+            if a >= warn_thresh:
+                labels.append('high')
+            elif a >= drop_thresh:
+                labels.append('transition')
+            else:
+                labels.append('drop')
+    else:
+        # Fallback: color by absolute AUPRC
+        labels = []
+        for a in auprcs:
+            if a >= 0.55:
+                labels.append('high')
+            elif a >= 0.45:
+                labels.append('transition')
+            else:
+                labels.append('drop')
 
     colors = {'high': '#10b981', 'transition': '#f59e0b', 'drop': '#ef4444'}
     marker_colors = [colors.get(l, '#94a3b8') for l in labels]
@@ -340,32 +465,55 @@ def build_scan_chart(scan_results, segments):
         marker=dict(color=marker_colors, size=8, line=dict(width=1, color='#fff')),
     ))
 
-    # Threshold lines
-    fig.add_hline(y=0.45, line_dash='dash', line_color='#f59e0b',
-                  annotation_text='Warning (0.45)', annotation_position='top left')
-    fig.add_hline(y=0.30, line_dash='dash', line_color='#ef4444',
-                  annotation_text='Critical (0.30)', annotation_position='top left')
+    # Threshold lines — use adaptive global thresholds when available
+    if threshold_mode == 'adaptive' and drift_thresholds and '__global__' in drift_thresholds:
+        gl = drift_thresholds['__global__']
+        warn_val = gl['warning']
+        crit_val = gl['critical']
+        warn_label = f'Warning (adaptive p95={warn_val:.3f})'
+        crit_label = f'Critical (adaptive p99={crit_val:.3f})'
+    else:
+        warn_val = 0.45
+        crit_val = 0.30
+        warn_label = 'Warning (0.45)'
+        crit_label = 'Critical (0.30)'
+
+    fig.add_hline(y=warn_val, line_dash='dash', line_color='#f59e0b',
+                  annotation_text=warn_label, annotation_position='top left')
+    fig.add_hline(y=crit_val, line_dash='dash', line_color='#ef4444',
+                  annotation_text=crit_label, annotation_position='top left')
+
+    # Baseline AUPRC line (manual mode)
+    if baseline_auprc and baseline_auprc > 0:
+        fig.add_hline(y=baseline_auprc, line_dash='dot', line_color='#a5b4fc',
+                      annotation_text=f'Baseline AUPRC ({baseline_auprc:.3f})',
+                      annotation_position='bottom right',
+                      annotation_font_color='#a5b4fc')
 
     if segments:
-        # T0 region
+        is_bw = segments.get('mode') == 'best_vs_worst'
+        t0_label = 'Best (高表現期)' if is_bw else 'T0 (訓練期)'
+        t1_label = 'Worst (低表現期)' if is_bw else 'T1 (推論期/Drop)'
+
+        # T0 / Best region
         fig.add_vrect(
             x0=segments['t0_date_start'], x1=segments['t0_date_end'],
             fillcolor='rgba(16,185,129,0.12)', line_width=2,
             line_color='rgba(16,185,129,0.5)',
-            annotation_text='T0 (訓練期)', annotation_position='top left',
+            annotation_text=t0_label, annotation_position='top left',
             annotation_font_color='#10b981',
         )
-        # T1 region
+        # T1 / Worst region
         fig.add_vrect(
             x0=segments['t1_date_start'], x1=segments['t1_date_end'],
             fillcolor='rgba(239,68,68,0.12)', line_width=2,
             line_color='rgba(239,68,68,0.5)',
-            annotation_text='T1 (推論期/Drop)', annotation_position='top right',
+            annotation_text=t1_label, annotation_position='top right',
             annotation_font_color='#ef4444',
         )
 
     fig.update_layout(
-        title='AUPRC 時序掃描 — 滑動視窗 (90d / 30d stride)',
+        title='AUPRC 時序掃描 — 滑動視窗',
         xaxis_title='Time', yaxis_title='AUPRC',
         height=400, yaxis=dict(range=[0, 1.05], gridcolor='rgba(99,102,241,0.08)'),
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
@@ -382,12 +530,14 @@ def build_scan_chart(scan_results, segments):
 # ==========================================
 
 def run_retrain_pipeline(csv_path, features, target_col,
-                         ver1_model=None, ver1_end_date=None,
+                         ver1_model=None, ver1_start_date=None, ver1_end_date=None,
                          model_name='Unknown', data_name='Unknown',
                          drift_threshold_mode='fixed',
                          scan_mode=False,
                          test_csv_path=None,
-                         progress_callback=None):
+                         progress_callback=None,
+                         manual_t0_start=None, manual_t0_end=None,
+                         cached_scan_results=None):
     """
     Run the full retrain pipeline.
 
@@ -403,6 +553,9 @@ def run_retrain_pipeline(csv_path, features, target_col,
         scan_mode: If True, auto-detect T0/T1 via AUPRC scan instead of using ver1_end_date.
         test_csv_path: Optional path to test CSV for baseline evaluation.
         progress_callback: Optional callable(step, total, message).
+        manual_t0_start: Optional manual T0 start date string (YYYY-MM-DD). Overrides auto-detection.
+        manual_t0_end: Optional manual T0 end date string (YYYY-MM-DD). Overrides auto-detection.
+        cached_scan_results: Optional pre-computed scan results (for re-analysis without re-scanning).
 
     Returns:
         dict with all results.
@@ -430,44 +583,168 @@ def run_retrain_pipeline(csv_path, features, target_col,
 
         data_start = df['Session_Date'].min()
         data_end = df['Session_Date'].max()
+        cutoff_start = data_start  # default; overridden by manual mode
 
-        # ========== SCAN MODE: Auto-detect T0/T1 ==========
+        # ========== SCAN MODE: Auto-detect or Manual T0/T1 ==========
         if scan_mode:
-            _progress(1, 7, 'AUPRC 滑動視窗掃描中（大資料集可能需要1-2分鐘）...')
-            scan_results = scan_auprc_windows(df, features, target_col)
-            if not scan_results:
-                result['error'] = 'AUPRC 掃描失敗：無法產生有效窗格。'
-                return result
+            # If manual T0 dates are specified, skip scanning and use them directly
+            if manual_t0_start and manual_t0_end:
+                _progress(1, 7, '使用手動 T0 範圍...')
 
-            _progress(2, 7, '偵測 AUPRC Drop 區段中...')
-            segments = detect_auprc_segments(scan_results)
-            if not segments:
-                result['error'] = 'AUPRC 區段偵測失敗：資料窗格不足。'
-                return result
+                # Re-use cached scan results if available, otherwise re-scan
+                if cached_scan_results:
+                    scan_results = cached_scan_results
+                else:
+                    scan_results = scan_auprc_windows(df, features, target_col)
+                    if not scan_results:
+                        result['error'] = 'AUPRC 掃描失敗：無法產生有效窗格。'
+                        return result
 
-            result['scan_results'] = scan_results
-            result['segments'] = segments
+                # Re-detect segments with auto-detect for labels/chart
+                segments = detect_auprc_segments(scan_results)
 
-            # Save segment data
-            import os
-            save_dir = os.path.join(os.path.dirname(csv_path), 'segments')
-            saved = save_segment_data(df, segments, save_dir)
-            result['saved_segments'] = saved
+                # Override T0 dates with manual values
+                manual_t0_s = pd.Timestamp(manual_t0_start)
+                manual_t0_e = pd.Timestamp(manual_t0_end)
 
-            # Use detected segments as cutoff
-            cutoff = pd.Timestamp(segments['t0_date_end'])
-            ver2_end = pd.Timestamp(segments['t1_date_end'])
+                if segments:
+                    segments['t0_date_start'] = str(manual_t0_s.date())
+                    segments['t0_date_end'] = str(manual_t0_e.date())
+                    # T1 starts right after manual T0 end
+                    segments['t1_date_start'] = str((manual_t0_e + pd.Timedelta(days=1)).date())
+                else:
+                    # Build minimal segments from manual dates
+                    last_date = df['Session_Date'].max()
+                    t1_end = last_date
+                    segments = {
+                        't0_date_start': str(manual_t0_s.date()),
+                        't0_date_end': str(manual_t0_e.date()),
+                        't1_date_start': str((manual_t0_e + pd.Timedelta(days=1)).date()),
+                        't1_date_end': str(t1_end.date()),
+                        'labels': [],
+                        'peak_auprc': max(r['auprc'] for r in scan_results) if scan_results else 0,
+                    }
+
+                result['scan_results'] = scan_results
+                result['segments'] = segments
+                result['manual_t0'] = True
+
+                cutoff = manual_t0_e
+                ver2_end = pd.Timestamp(segments['t1_date_end'])
+            else:
+                _progress(1, 7, 'AUPRC 滑動視窗掃描中（大資料集可能需要1-2分鐘）...')
+                scan_results = scan_auprc_windows(df, features, target_col)
+                if not scan_results:
+                    result['error'] = 'AUPRC 掃描失敗：無法產生有效窗格。'
+                    return result
+
+                _progress(2, 7, '偵測 AUPRC Drop 區段中...')
+                segments = detect_auprc_segments(scan_results)
+                if not segments:
+                    result['error'] = 'AUPRC 區段偵測失敗：資料窗格不足。'
+                    return result
+
+                result['scan_results'] = scan_results
+                result['segments'] = segments
+
+                # Save segment data
+                import os
+                save_dir = os.path.join(os.path.dirname(csv_path), 'segments')
+                saved = save_segment_data(df, segments, save_dir)
+                result['saved_segments'] = saved
+
+                # Use detected segments as cutoff
+                cutoff = pd.Timestamp(segments['t0_date_end'])
+                ver2_end = pd.Timestamp(segments['t1_date_end'])
+                cutoff_start = data_start
         else:
             # Manual cutoff mode
-            if ver1_end_date:
-                cutoff = pd.Timestamp(ver1_end_date)
+            _progress(1, 7, '設定手動訓練區間與基準驗證集...')
+            cutoff_start = pd.Timestamp(ver1_start_date) if ver1_start_date else data_start
+            cutoff_end = pd.Timestamp(ver1_end_date) if ver1_end_date else (data_end - pd.DateOffset(months=3))
+            
+            df_v1_all = df[(df['Session_Date'] >= cutoff_start) & (df['Session_Date'] <= cutoff_end)].copy()
+            if 'Patient_ID' not in df.columns or len(df_v1_all) < 50:
+                result['error'] = '資料不足或缺少 Patient_ID 欄位以進行 Validation Baseline 計算。'
+                return result
+                
+            splitter_val = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=RANDOM_STATE)
+            try:
+                v1_train_idx, v1_val_idx = next(splitter_val.split(df_v1_all, groups=df_v1_all['Patient_ID']))
+            except Exception as e:
+                result['error'] = f'Train/Val 切分失敗: {str(e)}'
+                return result
+                
+            df_v1_train_tmp = df_v1_all.iloc[v1_train_idx]
+            df_v1_val_tmp = df_v1_all.iloc[v1_val_idx]
+            
+            _progress(2, 7, '訓練 T0 基準模型 (Baseline)...')
+            from sklearn.ensemble import HistGradientBoostingClassifier
+            tmp_model = HistGradientBoostingClassifier(random_state=RANDOM_STATE)
+            X1_tmp = df_v1_train_tmp[features]
+            y1_tmp = df_v1_train_tmp[target_col]
+            m1_tmp = ~y1_tmp.isna()
+            tmp_model.fit(X1_tmp[m1_tmp], y1_tmp[m1_tmp])
+            
+            y1_val = df_v1_val_tmp[target_col].values.astype(float)
+            m1_val = ~np.isnan(y1_val)
+            if m1_val.sum() >= 5:
+                prob_val = tmp_model.predict_proba(df_v1_val_tmp[features].iloc[m1_val.nonzero()[0]])[:, 1]
+                baseline_auprc = _compute_auprc(y1_val[m1_val], prob_val)
             else:
-                cutoff = data_end - pd.DateOffset(months=3)
-            ver2_end = cutoff + pd.DateOffset(months=3)
-            if ver2_end > data_end:
-                ver2_end = data_end
+                baseline_auprc = 0.5
+            if baseline_auprc is None: baseline_auprc = 0.5
+            
+            _progress(3, 7, f'基準 AUPRC={baseline_auprc:.4f}，掃描推論期 Drop...')
+            drop_threshold = baseline_auprc * 0.85
+            df_inf = df[df['Session_Date'] > cutoff_end]
+            
+            ver2_end = data_end
+            current = cutoff_end
+            inf_end = df_inf['Session_Date'].max() if not df_inf.empty else cutoff_end
+            
+            scan_results = []
+            drop_found = False
+            while current < inf_end:
+                w_end = current + pd.Timedelta(days=30)
+                w_df = df_inf[(df_inf['Session_Date'] >= current) & (df_inf['Session_Date'] < w_end)]
+                if len(w_df) > 10:
+                    y_w = w_df[target_col].values
+                    m_w = ~np.isnan(y_w.astype(float))
+                    if m_w.sum() >= 5 and len(np.unique(y_w[m_w])) >= 2:
+                        prob_w = tmp_model.predict_proba(w_df[features].iloc[m_w.nonzero()[0]])[:, 1]
+                        auprc_w = _compute_auprc(y_w[m_w], prob_w)
+                        if auprc_w is not None:
+                            w_mid = current + (w_end - current) / 2
+                            scan_results.append({
+                                'date_start': str(current.date()),
+                                'date_end': str(w_end.date()),
+                                'date_mid': str(w_mid.date()),
+                                'auprc': auprc_w,
+                                'n_samples': int(m_w.sum())
+                            })
+                            # Record the first drop point for T1 but keep scanning
+                            if not drop_found and auprc_w < drop_threshold:
+                                ver2_end = w_end
+                                drop_found = True
+                current += pd.Timedelta(days=30)
+                
+            cutoff = cutoff_end
+            result['scan_results'] = scan_results
+            result['baseline_auprc'] = baseline_auprc
+            result['manual_t0'] = True
+            
+            segments = {
+                't0_date_start': str(cutoff_start.date()),
+                't0_date_end': str(cutoff_end.date()),
+                't1_date_start': str((cutoff_end + pd.Timedelta(days=1)).date()),
+                't1_date_end': str(ver2_end.date()),
+                'labels': [],
+                'peak_auprc': baseline_auprc,
+            }
+            result['segments'] = segments
 
-        df_v1_data = df[df['Session_Date'] <= cutoff].copy()
+        df_v1_data = df[(df['Session_Date'] >= cutoff_start) & (df['Session_Date'] <= cutoff)].copy()
         df_new_data_all = df[(df['Session_Date'] > cutoff) & (df['Session_Date'] <= ver2_end)].copy()
 
         result['data_info'] = {
@@ -480,14 +757,13 @@ def run_retrain_pipeline(csv_path, features, target_col,
             'ver2_end_date': str(ver2_end.date()),
             'v1_rows': len(df_v1_data),
             'new_rows': len(df_new_data_all),
-            'ver1_period': f'{data_start.date()} ~ {cutoff.date()}',
-            'ver2_period': f'{data_start.date()} ~ {ver2_end.date()}',
-            'new_data_period': f'{cutoff.date()} ~ {ver2_end.date()}',
+            'ver1_period': f"{cutoff_start.date()} ~ {cutoff.date()}",
+            'ver2_period': f"{cutoff_start.date()} ~ {ver2_end.date()}",
+            'new_data_period': f"{cutoff.date()} ~ {ver2_end.date()}",
             'scan_mode': scan_mode,
         }
 
-        # Add T0/T1 segment info when in scan mode
-        if scan_mode and 'segments' in result:
+        if 'segments' in result:
             seg = result['segments']
             result['data_info']['t0_period'] = f"{seg['t0_date_start']} ~ {seg['t0_date_end']}"
             result['data_info']['t1_period'] = f"{seg['t1_date_start']} ~ {seg['t1_date_end']}"
@@ -496,8 +772,8 @@ def run_retrain_pipeline(csv_path, features, target_col,
             result['data_info']['peak_auprc'] = seg['peak_auprc']
 
         # ========== STEP 1: Patient-level split ==========
-        step_offset = 3 if scan_mode else 2
-        total_steps = 7 if scan_mode else 6
+        step_offset = 3 if scan_mode else 4
+        total_steps = 7 if scan_mode else 7
         _progress(step_offset, total_steps, 'Patient-level split...')
 
         if 'Patient_ID' not in df.columns:
@@ -513,7 +789,7 @@ def run_retrain_pipeline(csv_path, features, target_col,
         df_train_all = df.iloc[train_idx].copy()
         df_test = df.iloc[test_idx].copy()
 
-        df_v1_train = df_train_all[df_train_all['Session_Date'] <= cutoff].copy()
+        df_v1_train = df_train_all[(df_train_all['Session_Date'] >= cutoff_start) & (df_train_all['Session_Date'] <= cutoff)].copy()
         df_new_data = df_train_all[(df_train_all['Session_Date'] > cutoff) & (df_train_all['Session_Date'] <= ver2_end)].copy()
         df_v2_train = df_new_data.copy()  # Train ver2 ONLY on T1 data
 
@@ -777,6 +1053,17 @@ def _extract_shape_functions(ver1, ver2, features, max_terms=8):
             n1 = min(len(bins1), len(scores1))
             n2 = min(len(bins2), len(scores2))
 
+            # Compute Spearman correlation between shape functions
+            # Interpolate both to common bins for fair comparison
+            from scipy.stats import spearmanr as _spearmanr
+            common_bins = np.union1d(bins1[:n1], bins2[:n2])
+            interp1 = np.interp(common_bins, bins1[:n1], scores1[:n1])
+            interp2 = np.interp(common_bins, bins2[:n2], scores2[:n2])
+            if len(common_bins) >= 3:
+                rho, p_val = _spearmanr(interp1, interp2)
+            else:
+                rho, p_val = float('nan'), float('nan')
+
             shape_data.append({
                 'name': term_name,
                 'importance_v1': float(imp1[idx]),
@@ -784,6 +1071,8 @@ def _extract_shape_functions(ver1, ver2, features, max_terms=8):
                 'scores_v1': scores1[:n1].tolist(),
                 'bins_v2': bins2[:n2].tolist(),
                 'scores_v2': scores2[:n2].tolist(),
+                'spearman_rho': round(float(rho), 4) if not np.isnan(rho) else None,
+                'spearman_p': round(float(p_val), 6) if not np.isnan(p_val) else None,
             })
             count += 1
 

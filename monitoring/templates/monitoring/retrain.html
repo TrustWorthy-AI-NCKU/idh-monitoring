@@ -19,9 +19,9 @@
         .nav-link:hover,.nav-link.active{background:var(--accent);color:#fff;border-color:var(--accent)}
         .theme-btn{width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--accent-t);color:var(--muted);font-size:18px;cursor:pointer;transition:all .2s}
         .main{display:flex;gap:24px;padding:24px;max-width:1600px;margin:0 auto}
-        .sidebar{width:340px;flex-shrink:0}
+        .sidebar{width:340px;flex-shrink:0;overflow:visible}
         .dash{flex:1;min-width:0}
-        .card{background:var(--card);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px;transition:background .3s,border-color .3s}
+        .card{background:var(--card);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px;transition:background .3s,border-color .3s;overflow:visible}
         .card-t{font-size:14px;font-weight:600;color:var(--accent-text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:16px;display:flex;align-items:center;gap:8px;cursor:pointer}
         .card-t::before{content:'';width:3px;height:16px;background:linear-gradient(180deg,#6366f1,#8b5cf6);border-radius:2px}
         .card-t .arrow{margin-left:auto;transition:transform .2s;font-size:12px}
@@ -83,6 +83,23 @@
         .progress-bar{width:100%;height:6px;background:var(--accent-t);border-radius:3px;overflow:hidden;margin-top:12px}
         .progress-fill{height:100%;background:linear-gradient(90deg,#6366f1,#8b5cf6);border-radius:3px;transition:width .3s}
         @media(max-width:900px){.main{flex-direction:column}.sidebar{width:100%}.grid2,.grid3{grid-template-columns:1fr}}
+        .info-icon{position:relative;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--accent-t);border:1px solid var(--border);color:var(--accent-text);font-size:11px;font-weight:700;cursor:help;transition:all .2s;margin-left:6px;user-select:none;flex-shrink:0}
+        .info-icon:hover{background:var(--accent);color:#fff}
+        /* Tooltip via JS portal to avoid backdrop-filter stacking context clipping */
+        #tt-portal{position:fixed;z-index:9999;background:var(--card,#1e293b);border:1px solid var(--border,rgba(99,102,241,.2));color:var(--text,#e2e8f0);padding:8px 12px;border-radius:8px;font-size:12px;font-weight:500;white-space:normal;width:220px;line-height:1.5;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none;opacity:0;transition:opacity .12s;}
+        #tt-portal.show{opacity:1;}
+        .info-modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center}
+        .info-modal-overlay.show{display:flex}
+        .info-modal{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px var(--shadow)}
+        .info-modal h3{font-size:16px;font-weight:700;color:var(--accent-text);margin-bottom:12px}
+        .info-modal p,.info-modal li{font-size:13px;color:var(--text);line-height:1.6}
+        .info-modal ul{padding-left:20px;margin:8px 0}
+        .info-modal .close-btn{margin-top:16px;padding:8px 20px;border-radius:8px;border:1px solid var(--border);background:var(--accent-t);color:var(--accent-text);font-size:13px;cursor:pointer;transition:all .2s}
+        .info-modal .close-btn:hover{background:var(--accent);color:#fff}
+        .spearman-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
+        .spearman-good{background:var(--ok-bg);color:var(--ok)}
+        .spearman-warn{background:rgba(245,158,11,.12);color:var(--warn)}
+        .spearman-bad{background:var(--err-bg);color:var(--err)}
     </style>
     <script>
         (function() {
@@ -119,57 +136,96 @@
                 <form method="post" enctype="multipart/form-data" id="upload-form">
                     {% csrf_token %}
                     <div class="fg">
-                        <label>📄 Dataset (.csv)</label>
-                        <input type="file" name="data_file" accept=".csv" class="fc" required>
-                        <div class="help">需包含 Patient_ID, Session_Date, 特徵欄位和目標欄位</div>
+                        <label style="font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center">
+                            Dataset (CSV)
+                            <i class="info-icon" data-tooltip="需包含 Patient_ID, Session_Date, 特徵欄位和目標欄位">i</i>
+                        </label>
+                        <input type="file" name="data_file" accept=".csv" class="fc" required style="border-radius:8px;padding:4px;">
                     </div>
-                    <div class="fg">
-                        <label>🤖 Model (.joblib)</label>
-                        <input type="file" name="ver1_model" accept=".joblib" class="fc">
-                        <div class="help">選擇性上傳，若未提供將從歷史資料重新訓練</div>
+
+                    <div class="fg" style="margin-top:16px">
+                        <label style="font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center">
+                            窗格選取方式
+                            <i class="info-icon" data-tooltip="選擇資料切分的邏輯：全域最佳/最差比較、自動偵測下降期、或手動指定日期">i</i>
+                        </label>
+                        <select name="window_selection_mode" id="window_selection_mode" class="fc" style="border-radius:8px;padding:8px;cursor:pointer" onchange="toggleSegmentMonths()">
+                            <option value="best_vs_worst">AUPRC 最佳 vs 最差</option>
+                            <option value="auto_scan">自動偵測最佳 vs 最佳 + 3個月</option>
+                            <option value="manual">手動指定時間切分</option>
+                        </select>
                     </div>
-                    <div class="fg">
-                        <label>Features（逗號分隔）</label>
-                        <textarea name="features" class="fc" placeholder="Sex, Age, Pre_HD_SBP, ...">Sex, Age, Pre_HD_SBP, Start_DBP, Heart_Rate, Respiratory_Rate, Blood_Flow_Rate, Dialysate_Temperature, Dialysate_Flow_Rate, Pre_HD_Weight, UF_BW_Perc, Body_Temperature, Dry_Weight, Target_UF_Volume, IDH_N_28D, IDH_N_7D</textarea>
+
+                    <div class="fg inline-row" id="segment_months_group" style="align-items:center;margin-top:12px;margin-bottom:16px">
+                        <label style="margin-bottom:0;flex-shrink:0;display:flex;align-items:center">
+                            區段長度(月)
+                            <i class="info-icon" data-tooltip="設定 Best / Worst 各自的時間長度">i</i>
+                        </label>
+                        <input type="number" name="segment_months" value="6" min="2" max="24" class="fc" style="width:80px;border-radius:8px;text-align:center">
                     </div>
-                    <div class="fg">
-                        <label>Target Column</label>
-                        <input type="text" name="target_col" value="Nadir90/100" class="fc">
-                    </div>
-                    <div class="fg">
-                        <label>📅 新資料起算日期 (Split Date)</label>
-                        <input type="date" name="new_data_start_date" class="fc">
-                        <div class="help">選填。此日期前的資料為 ver1 訓練集，之後為新資料。若未填寫將自動以資料集最後 3 個月作為新資料。</div>
-                    </div>
-                    <div class="fg">
-                        <label>🔍 自動偵測 (Scan Mode)</label>
-                        <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
-                            <input type="checkbox" name="scan_mode" id="scan_mode" style="accent-color:var(--accent);">
-                            <label for="scan_mode" style="margin-bottom:0;font-weight:400;color:var(--text);cursor:pointer;">開啟 AUPRC 滑動視窗掃描，自動識別 T0/T1</label>
+
+                    <div class="fg" id="manual_split_group" style="display:none;margin-top:12px;margin-bottom:16px">
+                        <label style="font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center">
+                            📅 指定訓練區間 (T0 / Ver 1)
+                            <i class="info-icon" data-tooltip="定義以此區間的資料進行模型訓練，並以其驗證集表現作為 Baseline">i</i>
+                        </label>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <input type="date" name="ver1_start_date" class="fc" style="border-radius:8px">
+                            <span style="color:var(--muted);font-size:13px;font-weight:600">至</span>
+                            <input type="date" name="ver1_end_date" class="fc" style="border-radius:8px">
                         </div>
-                        <div class="help">開啟後將忽略「新資料起算日期」和「ver1 模型」，自動從資料中找出高表現期(T0)訓練 ver1，並以表現下降期(T1)做為推論期。</div>
                     </div>
-                    <div class="fg">
-                        <label>📐 JS Divergence 閾值模式</label>
-                        <div style="display:flex;gap:8px;margin-top:4px;">
+
+                    <div class="fg" style="margin-top:16px">
+                        <label style="font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center">
+                            JS Divergence 閾值模式
+                            <i class="info-icon" data-tooltip="自適應模式依訓練集波動統計，固定模式為預設常數">i</i>
+                        </label>
+                        <div style="display:flex;gap:12px;margin-top:4px;">
                             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:0;font-weight:400;color:var(--text);">
                                 <input type="radio" name="drift_threshold_mode" value="fixed" checked style="accent-color:var(--accent);">
-                                固定閾值 <span style="font-size:11px;color:var(--dim)">(Warning 0.05 / Critical 0.10)</span>
+                                固定閾值
                             </label>
                             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:0;font-weight:400;color:var(--text);">
                                 <input type="radio" name="drift_threshold_mode" value="adaptive" style="accent-color:var(--accent);">
-                                自適應閾值 <span style="font-size:11px;color:var(--dim)">(Bootstrap P95/P99)</span>
+                                自適應閾值
                             </label>
                         </div>
-                        <div class="help">自適應模式將依訓練資料的自然波動統計閾值，耗時略增（~10s）。</div>
                     </div>
-                    <button type="submit" class="btn" id="submit-btn">🚀 執行 Pipeline</button>
-                    <div id="progress-area" style="display:none">
+
+                    <div class="fg" style="margin-top:16px">
+                        <label style="font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center">
+                            Features（逗號分隔）
+                            <i class="info-icon" data-tooltip="輸入要用來訓練與飄移分析的特徵欄位名稱">i</i>
+                        </label>
+                        <textarea name="features" class="fc" style="height:60px;border-radius:8px" placeholder="Sex, Age, Pre_HD_SBP, ...">Sex, Age, Pre_HD_SBP, Start_DBP, Heart_Rate, Respiratory_Rate, Blood_Flow_Rate, Dialysate_Temperature, Dialysate_Flow_Rate, Pre_HD_Weight, UF_BW_Perc, Body_Temperature, Dry_Weight, Target_UF_Volume, IDH_N_28D, IDH_N_7D</textarea>
+                    </div>
+                    <div class="fg">
+                        <label style="font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center">
+                            Target Column
+                            <i class="info-icon" data-tooltip="輸入目標變數的欄位名稱">i</i>
+                        </label>
+                        <input type="text" name="target_col" value="Nadir90/100" class="fc" style="border-radius:8px">
+                    </div>
+
+                    <button type="submit" class="btn" id="submit-btn" style="width:100%;padding:12px;font-size:15px;margin-top:12px">開始執行</button>
+                    <div id="progress-area" style="display:none;margin-top:12px">
                         <div class="progress-bar"><div class="progress-fill" id="pbar" style="width:0%"></div></div>
                         <div style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center" id="ptext">準備中...</div>
                     </div>
                 </form>
             </div>
+            
+            <script>
+                function toggleSegmentMonths() {
+                    var mode = document.getElementById('window_selection_mode').value;
+                    var segGroup = document.getElementById('segment_months_group');
+                    var manualGroup = document.getElementById('manual_split_group');
+                    segGroup.style.display = (mode === 'best_vs_worst') ? 'flex' : 'none';
+                    manualGroup.style.display = (mode === 'manual') ? 'block' : 'none';
+                }
+                // Call on load
+                document.addEventListener('DOMContentLoaded', toggleSegmentMonths);
+            </script>
 
             {% if has_result and result %}
             <div class="card">
@@ -218,17 +274,17 @@
 
 
                     {% if r.data_info.scan_mode %}
-                    <!-- Scan Mode: Show T0/T1 segment info -->
+                    <!-- Scan Mode: Show T0/T1 or Best/Worst segment info -->
                     <div class="grid3">
                         <div class="stat-card" style="border-left: 3px solid #10b981;">
-                            <div class="stat-label">🟢 T0 訓練期 (ver1)</div>
-                            <div class="stat-val" style="font-size:14px">{{ r.data_info.t0_period }}</div>
-                            <div class="stat-sub">{{ r.data_info.t0_rows }} rows</div>
+                            <div class="stat-label">🟢 {% if r.best_vs_worst %}Best (高表現期){% else %}T0 訓練期{% endif %}</div>
+                            <div class="stat-val" style="font-size:14px">{{ r.segments.t0_date_start }} ~ {{ r.segments.t0_date_end }}</div>
+                            <div class="stat-sub">{{ r.data_info.t0_rows }} rows{% if r.best_vs_worst %} · 均值 {{ r.segments.best_mean_auprc }}{% endif %}</div>
                         </div>
                         <div class="stat-card" style="border-left: 3px solid #ef4444;">
-                            <div class="stat-label">🔴 T1 推論期 (ver2)</div>
-                            <div class="stat-val" style="font-size:14px">{{ r.data_info.t1_period }}</div>
-                            <div class="stat-sub">{{ r.data_info.t1_rows }} rows</div>
+                            <div class="stat-label">🔴 {% if r.best_vs_worst %}Worst (低表現期){% else %}T1 推論期{% endif %}</div>
+                            <div class="stat-val" style="font-size:14px">{{ r.segments.t1_date_start }} ~ {{ r.segments.t1_date_end }}</div>
+                            <div class="stat-sub">{{ r.data_info.t1_rows }} rows{% if r.best_vs_worst %} · 均值 {{ r.segments.worst_mean_auprc }}{% endif %}</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">📈 Peak AUPRC</div>
@@ -258,7 +314,44 @@
                     🔍 AUPRC 時序掃描與 T0/T1 偵測 <span class="chevron up" id="s0-chevron">▼</span>
                 </div>
                 <div class="section-body" id="s0-body">
-                    <div class="chart-box"><div id="scan-chart"></div></div>
+                    <div class="chart-box" style="position:relative">
+                        <div id="scan-chart"></div>
+                        <span class="info-icon" onclick="document.getElementById('color-info-modal').classList.add('show')" style="position:absolute;bottom:12px;right:12px" title="顏色說明">?</span>
+                    </div>
+
+                    <!-- Manual T0 Selection -->
+                    {% if r.data_info.scan_mode %}
+                    <div style="background:var(--card-deep);border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:12px">
+                        <div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--accent-text);margin-bottom:10px">
+                            ✏️ 手動調整 T0 範圍
+                            <span class="info-icon" onclick="document.getElementById('t0-info-modal').classList.add('show')" title="操作說明">?</span>
+                        </div>
+                        <form method="post" action="{% url 'monitoring:retrain_reanalyze' %}" id="reanalyze-form">
+                            {% csrf_token %}
+                            <div class="inline-row" style="margin-bottom:12px">
+                                <div class="fg" style="margin-bottom:0">
+                                    <label style="margin-bottom:4px">T0 開始</label>
+                                    <input type="date" name="manual_t0_start" id="manual-t0-start" class="fc"
+                                           value="{{ r.segments.t0_date_start }}">
+                                </div>
+                                <div class="fg" style="margin-bottom:0">
+                                    <label style="margin-bottom:4px">T0 結束</label>
+                                    <input type="date" name="manual_t0_end" id="manual-t0-end" class="fc"
+                                           value="{{ r.segments.t0_date_end }}">
+                                </div>
+                                <div style="display:flex;align-items:flex-end">
+                                    <button type="submit" class="btn" id="reanalyze-btn"
+                                            style="padding:10px 20px;font-size:13px;white-space:nowrap">
+                                        🔄 以此範圍重新分析
+                                    </button>
+                                </div>
+                            </div>
+                            {% if r.manual_t0 %}
+                            <div class="help" style="color:var(--accent-text)">ℹ️ 目前顯示的是手動 T0 範圍的分析結果</div>
+                            {% endif %}
+                        </form>
+                    </div>
+                    {% endif %}
 
                     <!-- Drift Diagnosis (embedded below chart) -->
                     {% if r.data_info.scan_mode %}
@@ -330,6 +423,7 @@
             <div class="section">
                 <div class="section-title" onclick="toggleSection('s5')">
                     🧠 Concept Drift <span class="chevron up" id="s5-chevron">▼</span>
+                    <span class="info-icon" data-tooltip="Spearman ρ ≥ 0.8：綠色，模型邏輯穩定；0.5–0.8：黃色，輕微漂移；< 0.5：紅色，概念已顯著改變" style="margin-left:8px" onclick="event.stopPropagation()">i</span>
                 </div>
                 <div class="section-body" id="s5-body">
                     <div class="grid2">
@@ -353,7 +447,16 @@
                     {% if r.charts.shapes %}
                     <div style="font-size:13px;font-weight:600;color:#a5b4fc;margin:12px 0">Shape Function 比較</div>
                     {% for sf in r.charts.shapes %}
-                    <div class="chart-box"><div id="shape-chart-{{ forloop.counter0 }}"></div></div>
+                    <div class="chart-box" style="position:relative">
+                        <div id="shape-chart-{{ forloop.counter0 }}"></div>
+                        {% if sf.spearman_rho != None %}
+                        <div style="position:absolute;top:10px;right:12px;display:flex;align-items:center;gap:6px">
+                            <span class="spearman-badge {% if sf.spearman_rho >= 0.8 %}spearman-good{% elif sf.spearman_rho >= 0.5 %}spearman-warn{% else %}spearman-bad{% endif %}">
+                                ρ = {{ sf.spearman_rho }}
+                            </span>
+                        </div>
+                        {% endif %}
+                    </div>
                     {% endfor %}
                     {% endif %}
                 </div>
@@ -361,6 +464,39 @@
 
             {% endwith %}
             {% endif %}
+        </div>
+    </div>
+    <!-- Info Modals -->
+    <div class="info-modal-overlay" id="color-info-modal" onclick="if(event.target===this)this.classList.remove('show')">
+        <div class="info-modal">
+            <h3>📊 AUPRC 資料點顏色說明</h3>
+            <p>每個資料點代表一個 <strong>90 天滑動窗格</strong>的 AUPRC 值。顏色由<strong>局部 Peak</strong>（前後 ±6 個月的最大值）決定：</p>
+            <ul>
+                <li><strong style="color:#10b981">🟢 綠色 (High)</strong>：相對局部 Peak 下降 ≤ 15%，且絕對值 ≥ 0.45。模型在此區段表現穩定。</li>
+                <li><strong style="color:#f59e0b">🟡 黃色 (Transition)</strong>：相對下降 > 15% 或 AUPRC < 0.45。模型表現開始出現波動。</li>
+                <li><strong style="color:#ef4444">🔴 紅色 (Drop)</strong>：相對下降 > 30% 或 AUPRC < 0.30。模型表現顯著下降。</li>
+            </ul>
+            <p style="font-size:12px;color:var(--dim)">虛線為固定門檻：Warning (0.45) 和 Critical (0.30)。</p>
+            <button class="close-btn" onclick="this.closest('.info-modal-overlay').classList.remove('show')">關閉</button>
+        </div>
+    </div>
+
+    <div class="info-modal-overlay" id="t0-info-modal" onclick="if(event.target===this)this.classList.remove('show')">
+        <div class="info-modal">
+            <h3>✏️ 手動 T0 範圍選擇指南</h3>
+            <p><strong>操作方式：</strong></p>
+            <ul>
+                <li>在 AUPRC 折線圖上<strong>拖曳框選</strong>（drag select）一段區域，日期會自動填入。</li>
+                <li>或直接在<strong>日期欄位</strong>中手動輸入 T0 的開始與結束日期。</li>
+                <li>完成後點擊「🔄 以此範圍重新分析」按鈕。</li>
+            </ul>
+            <p><strong>T0 與 T1 的關係：</strong></p>
+            <ul>
+                <li><strong>T0</strong>：您選擇的時間範圍，作為模型的「訓練期」基線資料。</li>
+                <li><strong>T1</strong>：自動設定為 T0 結束日期之後、到資料集結尾的所有資料，代表「推論期」。</li>
+            </ul>
+            <p><strong>Drift 分析：</strong>系統會以 T0 資料訓練 ver1 模型、T1 資料訓練 ver2 模型，然後比較兩段的 Data Drift（JS Divergence）和 Concept Drift（Spearman ρ）。</p>
+            <button class="close-btn" onclick="this.closest('.info-modal-overlay').classList.remove('show')">關閉</button>
         </div>
     </div>
 
@@ -427,7 +563,39 @@
     {% if result.charts.scan %}
     var scData=JSON.parse('{{ result.charts.scan|escapejs }}');
     Object.assign(scData.layout,darkLayout);
+    scData.layout.dragmode = 'select';  // Enable box select
     Plotly.newPlot('scan-chart',scData.data,scData.layout,plotCfg);
+
+    // Plotly box-select → auto-fill T0 date inputs
+    var scanEl = document.getElementById('scan-chart');
+    if(scanEl){
+        scanEl.on('plotly_selected', function(eventData){
+            if(!eventData || !eventData.points || eventData.points.length === 0) return;
+            var xs = eventData.points.map(function(p){ return p.x; }).sort();
+            var startEl = document.getElementById('manual-t0-start');
+            var endEl = document.getElementById('manual-t0-end');
+            if(startEl) startEl.value = xs[0];
+            if(endEl) endEl.value = xs[xs.length - 1];
+        });
+    }
+
+    // Reanalyze button progress
+    var reForm = document.getElementById('reanalyze-form');
+    if(reForm){
+        reForm.addEventListener('submit', function(){
+            var btn = document.getElementById('reanalyze-btn');
+            if(btn){ btn.disabled=true; btn.innerHTML='⏳ 重新分析中...'; }
+        });
+    }
+
+    // Best vs Worst button progress
+    var bwForm = document.getElementById('best-worst-form');
+    if(bwForm){
+        bwForm.addEventListener('submit', function(){
+            var btn = document.getElementById('best-worst-btn');
+            if(btn){ btn.disabled=true; btn.innerHTML='⏳ Best vs Worst 分析中...'; }
+        });
+    }
     {% endif %}
 
     {% if result.charts.drift %}
@@ -487,6 +655,37 @@
             }
         });
     }
+    </script>
+
+    <!-- Tooltip portal (escapes backdrop-filter stacking context) -->
+    <div id="tt-portal"></div>
+    <script>
+    (function(){
+        var portal = document.getElementById('tt-portal');
+        var hideTimer;
+        document.addEventListener('mouseover', function(e){
+            var el = e.target.closest('.info-icon[data-tooltip]');
+            if(!el) return;
+            clearTimeout(hideTimer);
+            portal.textContent = el.getAttribute('data-tooltip');
+            var rect = el.getBoundingClientRect();
+            var left = rect.left;
+            var top = rect.top - 8;
+            // Clamp right edge
+            var pw = 220;
+            if(left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+            if(left < 8) left = 8;
+            portal.style.left = left + 'px';
+            portal.style.top = top + 'px';
+            portal.style.transform = 'translateY(-100%)';
+            portal.classList.add('show');
+        });
+        document.addEventListener('mouseout', function(e){
+            var el = e.target.closest('.info-icon[data-tooltip]');
+            if(!el) return;
+            hideTimer = setTimeout(function(){ portal.classList.remove('show'); }, 80);
+        });
+    })();
     </script>
 </body>
 </html>
